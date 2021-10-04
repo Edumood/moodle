@@ -43,3 +43,6 @@ $string['users_help'] = 'All users who passed the active filters are listed in t
 $string['usersfound'] = '{$a} user(s) found.';
 $string['usersinlist'] = 'Users in list';
 $string['usersselected'] = '{$a} user(s) selected.';
+$string['resetpassword'] = 'Reset password';
+$string['resetpasswordnot'] = 'Could not reset a password to {$a}';
+$string['resetpasswordcheckfull'] = 'Are you absolutely sure you want to reset password to {$a} ?';

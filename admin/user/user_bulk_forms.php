@@ -76,6 +76,12 @@ class user_bulk_action_form extends moodleform {
                 new moodle_url('/admin/user/user_bulk_forcepasswordchange.php'),
                 get_string('forcepasswordchange'));
         }
+        if (has_capability('moodle/user:update', $syscontext)) {
+            $actions['resetpassword'] = new action_link(
+                new moodle_url('/admin/user/user_bulk_resetpassword.php'),
+                get_string('resetpassword','bulkusers'));
+        }
+
         if (has_capability('moodle/cohort:assign', $syscontext)) {
             $actions['addtocohort'] = new action_link(
                 new moodle_url('/admin/user/user_bulk_cohortadd.php'),
