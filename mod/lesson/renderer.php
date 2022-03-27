@@ -37,7 +37,7 @@ class mod_lesson_renderer extends plugin_renderer_base {
      * @return string
      */
     public function header($lesson, $cm, $currenttab = '', $extraeditbuttons = false, $lessonpageid = null, $extrapagetitle = null) {
-        global $CFG;
+        global $CFG, $USER;
 
         $activityname = format_string($lesson->name, true, $lesson->course);
         if (empty($extrapagetitle)) {
@@ -55,8 +55,13 @@ class mod_lesson_renderer extends plugin_renderer_base {
         lesson_add_header_buttons($cm, $context, $extraeditbuttons, $lessonpageid);
         $output = $this->output->header();
 
+        $cminfo = cm_info::create($cm);
+        $completiondetails = \core_completion\cm_completion_details::get_instance($cminfo, $USER->id);
+        $activitydates = \core\activity_dates::get_dates_for_module($cminfo, $USER->id);
         if (has_capability('mod/lesson:manage', $context)) {
             $output .= $this->output->heading_with_help($activityname, 'overview', 'lesson');
+            $output .= $this->output->activity_information($cminfo, $completiondetails, $activitydates);
+
             // Info box.
             if ($lesson->intro) {
                 $output .= $this->output->box(format_module_intro('lesson', $lesson, $cm->id), 'generalbox', 'intro');
@@ -69,6 +74,8 @@ class mod_lesson_renderer extends plugin_renderer_base {
             }
         } else {
             $output .= $this->output->heading($activityname);
+            $output .= $this->output->activity_information($cminfo, $completiondetails, $activitydates);
+
             // Info box.
             if ($lesson->intro) {
                 $output .= $this->output->box(format_module_intro('lesson', $lesson, $cm->id), 'generalbox', 'intro');
@@ -222,11 +229,6 @@ class mod_lesson_renderer extends plugin_renderer_base {
         $table = new html_table();
         $table->head = array(get_string('pagetitle', 'lesson'), get_string('qtype', 'lesson'), get_string('jumps', 'lesson'), get_string('actions', 'lesson'));
         $table->align = array('left', 'left', 'left', 'center');
-        $table->wrap = array('', 'nowrap', '', 'nowrap');
-        $table->tablealign = 'center';
-        $table->cellspacing = 0;
-        $table->cellpadding = '2px';
-        $table->width = '80%';
         $table->data = array();
 
         $canedit = has_capability('mod/lesson:edit', context_module::instance($this->page->cm->id));
@@ -251,7 +253,7 @@ class mod_lesson_renderer extends plugin_renderer_base {
             $pageid = $page->nextpageid;
         }
 
-        return html_writer::table($table);
+        return html_writer::div(html_writer::table($table), 'table-responsive');
     }
 
     /**
@@ -451,6 +453,7 @@ class mod_lesson_renderer extends plugin_renderer_base {
 
             $addpageurl = new moodle_url('/mod/lesson/editpage.php', array('id'=>$this->page->cm->id, 'pageid'=>$page->id, 'sesskey'=>sesskey()));
             $addpageselect = new single_select($addpageurl, 'qtype', $options, null, array(''=>get_string('addanewpage', 'lesson').'...'), 'addpageafter'.$page->id);
+            $addpageselect->attributes = ['aria-label' => get_string('actions', 'lesson')];
             $addpageselector = $this->output->render($addpageselect);
         }
 
@@ -601,6 +604,9 @@ class mod_lesson_renderer extends plugin_renderer_base {
 
         if ($data->yourcurrentgradeisoutof !== false) {
             $output .= $this->paragraph(get_string("yourcurrentgradeisoutof", "lesson", $data->yourcurrentgradeisoutof), 'center');
+        }
+        if ($data->yourcurrentgradeis !== false) {
+            $output .= $this->paragraph(get_string("yourcurrentgradeis", "lesson", $data->yourcurrentgradeis), 'center');
         }
         if ($data->eolstudentoutoftimenoanswers !== false) {
             $output .= $this->paragraph(get_string("eolstudentoutoftimenoanswers", "lesson"));

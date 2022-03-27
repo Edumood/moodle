@@ -496,6 +496,11 @@ define('HOMEPAGE_USER', 2);
 defined('HUB_MOODLEORGHUBURL') || define('HUB_MOODLEORGHUBURL', 'https://stats.moodle.org');
 
 /**
+ * URL of the statistic server public key.
+ */
+defined('HUB_STATSPUBLICKEY') || define('HUB_STATSPUBLICKEY', 'https://moodle.org/static/statspubkey.pem');
+
+/**
  * Moodle mobile app service name
  */
 define('MOODLE_OFFICIAL_MOBILE_SERVICE', 'moodle_mobile_app');
@@ -1284,7 +1289,7 @@ function fix_utf8($value) {
         if ($buggyiconv) {
             if (function_exists('mb_convert_encoding')) {
                 $subst = mb_substitute_character();
-                mb_substitute_character('');
+                mb_substitute_character('none');
                 $result = mb_convert_encoding($value, 'utf-8', 'utf-8');
                 mb_substitute_character($subst);
 
@@ -1457,6 +1462,8 @@ function set_config($name, $value, $plugin=null) {
  *
  * NOTE: this function is called from lib/db/upgrade.php
  *
+ * @static string|false $siteidentifier The site identifier is not cached. We use this static cache so
+ *     that we need only fetch it once per request.
  * @param string $plugin full component name
  * @param string $name default null
  * @return mixed hash-like object or single value, return false no config found
@@ -1465,29 +1472,52 @@ function set_config($name, $value, $plugin=null) {
 function get_config($plugin, $name = null) {
     global $CFG, $DB;
 
+    static $siteidentifier = null;
+
     if ($plugin === 'moodle' || $plugin === 'core' || empty($plugin)) {
         $forced =& $CFG->config_php_settings;
-        $table = 'config';
-        $filter = [];
+        $iscore = true;
         $plugin = 'core';
     } else {
         if (array_key_exists($plugin, $CFG->forced_plugin_settings)) {
             $forced =& $CFG->forced_plugin_settings[$plugin];
         } else {
-            $forced = [];
+            $forced = array();
         }
-        $table = 'config_plugins';
-        $filter = ['plugin' => $plugin];
+        $iscore = false;
     }
 
-    if (!empty($name) && array_key_exists($name, $forced)) {
-        return (string)$forced[$name];
+    if ($siteidentifier === null) {
+        try {
+            // This may fail during installation.
+            // If you have a look at {@link initialise_cfg()} you will see that this is how we detect the need to
+            // install the database.
+            $siteidentifier = $DB->get_field('config', 'value', array('name' => 'siteidentifier'));
+        } catch (dml_exception $ex) {
+            // Set siteidentifier to false. We don't want to trip this continually.
+            $siteidentifier = false;
+            throw $ex;
+        }
+    }
+
+    if (!empty($name)) {
+        if (array_key_exists($name, $forced)) {
+            return (string)$forced[$name];
+        } else if ($name === 'siteidentifier' && $plugin == 'core') {
+            return $siteidentifier;
+        }
     }
 
     $cache = cache::make('core', 'config');
     $result = $cache->get($plugin);
     if ($result === false) {
-        $result = $DB->get_records_menu($table, $filter, '', 'name,value');
+        // The user is after a recordset.
+        if (!$iscore) {
+            $result = $DB->get_records_menu('config_plugins', array('plugin' => $plugin), '', 'name,value');
+        } else {
+            // This part is not really used any more, but anyway...
+            $result = $DB->get_records_menu('config', array(), '', 'name,value');;
+        }
         $cache->set($plugin, $result);
     }
 
@@ -1496,6 +1526,10 @@ function get_config($plugin, $name = null) {
             return $result[$name];
         }
         return false;
+    }
+
+    if ($plugin === 'core') {
+        $result['siteidentifier'] = $siteidentifier;
     }
 
     foreach ($forced as $key => $value) {
@@ -2325,6 +2359,14 @@ function date_format_string($date, $format, $tz = 99) {
  * @return array An array that represents the date in user time
  */
 function usergetdate($time, $timezone=99) {
+    if ($time === null) {
+        // PHP8 and PHP7 return different results when getdate(null) is called.
+        // Display warning and cast to 0 to make sure the usergetdate() behaves consistently on all versions of PHP.
+        // In the future versions of Moodle we may consider adding a strict typehint.
+        debugging('usergetdate() expects parameter $time to be int, null given', DEBUG_DEVELOPER);
+        $time = 0;
+    }
+
     date_default_timezone_set(core_date::get_user_timezone($timezone));
     $result = getdate($time);
     core_date::set_default_server_timezone();
@@ -2690,13 +2732,8 @@ function require_login($courseorid = null, $autologinguest = true, $cm = null, $
                 $SESSION->wantsurl = qualified_me();
             }
 
-            $referer = get_local_referer(false);
-            if (!empty($referer)) {
-                $SESSION->fromurl = $referer;
-            }
-
             // Give auth plugins an opportunity to authenticate or redirect to an external login page
-            $authsequence = get_enabled_auth_plugins(true); // auths, in sequence
+            $authsequence = get_enabled_auth_plugins(); // Auths, in sequence.
             foreach($authsequence as $authname) {
                 $authplugin = get_auth_plugin($authname);
                 $authplugin->pre_loginpage_hook();
@@ -3511,7 +3548,7 @@ function fullname($user, $override=false) {
     }
 
     // Get all of the name fields.
-    $allnames = get_all_user_name_fields();
+    $allnames = \core_user\fields::get_name_fields();
     if ($CFG->debugdeveloper) {
         foreach ($allnames as $allname) {
             if (!property_exists($user, $allname)) {
@@ -3604,64 +3641,6 @@ function fullname($user, $override=false) {
 }
 
 /**
- * A centralised location for the all name fields. Returns an array / sql string snippet.
- *
- * @param bool $returnsql True for an sql select field snippet.
- * @param string $tableprefix table query prefix to use in front of each field.
- * @param string $prefix prefix added to the name fields e.g. authorfirstname.
- * @param string $fieldprefix sql field prefix e.g. id AS userid.
- * @param bool $order moves firstname and lastname to the top of the array / start of the string.
- * @return array|string All name fields.
- */
-function get_all_user_name_fields($returnsql = false, $tableprefix = null, $prefix = null, $fieldprefix = null, $order = false) {
-    // This array is provided in this order because when called by fullname() (above) if firstname is before
-    // firstnamephonetic str_replace() will change the wrong placeholder.
-    $alternatenames = array('firstnamephonetic' => 'firstnamephonetic',
-                            'lastnamephonetic' => 'lastnamephonetic',
-                            'middlename' => 'middlename',
-                            'alternatename' => 'alternatename',
-                            'firstname' => 'firstname',
-                            'lastname' => 'lastname');
-
-    // Let's add a prefix to the array of user name fields if provided.
-    if ($prefix) {
-        foreach ($alternatenames as $key => $altname) {
-            $alternatenames[$key] = $prefix . $altname;
-        }
-    }
-
-    // If we want the end result to have firstname and lastname at the front / top of the result.
-    if ($order) {
-        // Move the last two elements (firstname, lastname) off the array and put them at the top.
-        for ($i = 0; $i < 2; $i++) {
-            // Get the last element.
-            $lastelement = end($alternatenames);
-            // Remove it from the array.
-            unset($alternatenames[$lastelement]);
-            // Put the element back on the top of the array.
-            $alternatenames = array_merge(array($lastelement => $lastelement), $alternatenames);
-        }
-    }
-
-    // Create an sql field snippet if requested.
-    if ($returnsql) {
-        if ($tableprefix) {
-            if ($fieldprefix) {
-                foreach ($alternatenames as $key => $altname) {
-                    $alternatenames[$key] = $tableprefix . '.' . $altname . ' AS ' . $fieldprefix . $altname;
-                }
-            } else {
-                foreach ($alternatenames as $key => $altname) {
-                    $alternatenames[$key] = $tableprefix . '.' . $altname;
-                }
-            }
-        }
-        $alternatenames = implode(',', $alternatenames);
-    }
-    return $alternatenames;
-}
-
-/**
  * Reduces lines of duplicated code for getting user name fields.
  *
  * See also {@link user_picture::unalias()}
@@ -3674,7 +3653,10 @@ function get_all_user_name_fields($returnsql = false, $tableprefix = null, $pref
  * @return object User name fields.
  */
 function username_load_fields_from_object($addtoobject, $secondobject, $prefix = null, $additionalfields = null) {
-    $fields = get_all_user_name_fields(false, null, $prefix);
+    $fields = [];
+    foreach (\core_user\fields::get_name_fields() as $field) {
+        $fields[$field] = $prefix . $field;
+    }
     if ($additionalfields) {
         // Additional fields can specify their own 'alias' such as 'id' => 'userid'. This checks to see if
         // the key is a number and then sets the key to the array value.
@@ -3721,119 +3703,6 @@ function order_in_string($values, $stringformat) {
     }
     ksort($valuearray);
     return $valuearray;
-}
-
-/**
- * Checks if current user is shown any extra fields when listing users.
- *
- * @param object $context Context
- * @param array $already Array of fields that we're going to show anyway
- *   so don't bother listing them
- * @return array Array of field names from user table, not including anything
- *   listed in $already
- */
-function get_extra_user_fields($context, $already = array()) {
-    global $CFG;
-
-    // Only users with permission get the extra fields.
-    if (!has_capability('moodle/site:viewuseridentity', $context)) {
-        return array();
-    }
-
-    // Split showuseridentity on comma (filter needed in case the showuseridentity is empty).
-    $extra = array_filter(explode(',', $CFG->showuseridentity));
-
-    foreach ($extra as $key => $field) {
-        if (in_array($field, $already)) {
-            unset($extra[$key]);
-        }
-    }
-
-    // If the identity fields are also among hidden fields, make sure the user can see them.
-    $hiddenfields = array_filter(explode(',', $CFG->hiddenuserfields));
-    $hiddenidentifiers = array_intersect($extra, $hiddenfields);
-
-    if ($hiddenidentifiers) {
-        if ($context->get_course_context(false)) {
-            // We are somewhere inside a course.
-            $canviewhiddenuserfields = has_capability('moodle/course:viewhiddenuserfields', $context);
-
-        } else {
-            // We are not inside a course.
-            $canviewhiddenuserfields = has_capability('moodle/user:viewhiddendetails', $context);
-        }
-
-        if (!$canviewhiddenuserfields) {
-            // Remove hidden identifiers from the list.
-            $extra = array_diff($extra, $hiddenidentifiers);
-        }
-    }
-
-    // Re-index the entries.
-    $extra = array_values($extra);
-
-    return $extra;
-}
-
-/**
- * If the current user is to be shown extra user fields when listing or
- * selecting users, returns a string suitable for including in an SQL select
- * clause to retrieve those fields.
- *
- * @param context $context Context
- * @param string $alias Alias of user table, e.g. 'u' (default none)
- * @param string $prefix Prefix for field names using AS, e.g. 'u_' (default none)
- * @param array $already Array of fields that we're going to include anyway so don't list them (default none)
- * @return string Partial SQL select clause, beginning with comma, for example ',u.idnumber,u.department' unless it is blank
- */
-function get_extra_user_fields_sql($context, $alias='', $prefix='', $already = array()) {
-    $fields = get_extra_user_fields($context, $already);
-    $result = '';
-    // Add punctuation for alias.
-    if ($alias !== '') {
-        $alias .= '.';
-    }
-    foreach ($fields as $field) {
-        $result .= ', ' . $alias . $field;
-        if ($prefix) {
-            $result .= ' AS ' . $prefix . $field;
-        }
-    }
-    return $result;
-}
-
-/**
- * Returns the display name of a field in the user table. Works for most fields that are commonly displayed to users.
- * @param string $field Field name, e.g. 'phone1'
- * @return string Text description taken from language file, e.g. 'Phone number'
- */
-function get_user_field_name($field) {
-    // Some fields have language strings which are not the same as field name.
-    switch ($field) {
-        case 'url' : {
-            return get_string('webpage');
-        }
-        case 'icq' : {
-            return get_string('icqnumber');
-        }
-        case 'skype' : {
-            return get_string('skypeid');
-        }
-        case 'aim' : {
-            return get_string('aimid');
-        }
-        case 'yahoo' : {
-            return get_string('yahooid');
-        }
-        case 'msn' : {
-            return get_string('msnid');
-        }
-        case 'picture' : {
-            return get_string('pictureofuser');
-        }
-    }
-    // Otherwise just use the same lang string.
-    return get_string($field);
 }
 
 /**
@@ -3890,7 +3759,7 @@ function get_auth_plugin($auth) {
 /**
  * Returns array of active auth plugins.
  *
- * @param bool $fix fix $CFG->auth if needed
+ * @param bool $fix fix $CFG->auth if needed. Only set if logged in as admin.
  * @return array
  */
 function get_enabled_auth_plugins($fix=false) {
@@ -3904,18 +3773,21 @@ function get_enabled_auth_plugins($fix=false) {
         $auths = explode(',', $CFG->auth);
     }
 
-    if ($fix) {
-        $auths = array_unique($auths);
-        $oldauthconfig = implode(',', $auths);
-        foreach ($auths as $k => $authname) {
-            $authplugindoesnotexist = !exists_auth_plugin($authname);
-            if ($authplugindoesnotexist || in_array($authname, $default)) {
-                if ($authplugindoesnotexist) {
-                    debugging(get_string('authpluginnotfound', 'debug', $authname));
-                }
-                unset($auths[$k]);
-            }
+    $auths = array_unique($auths);
+    $oldauthconfig = implode(',', $auths);
+    foreach ($auths as $k => $authname) {
+        if (in_array($authname, $default)) {
+            // The manual and nologin plugin never need to be stored.
+            unset($auths[$k]);
+        } else if (!exists_auth_plugin($authname)) {
+            debugging(get_string('authpluginnotfound', 'debug', $authname));
+            unset($auths[$k]);
         }
+    }
+
+    // Ideally only explicit interaction from a human admin should trigger a
+    // change in auth config, see MDL-70424 for details.
+    if ($fix) {
         $newconfig = implode(',', $auths);
         if (!isset($CFG->auth) or $newconfig != $CFG->auth) {
             add_to_config_log('auth', $oldauthconfig, $newconfig, 'core');
@@ -4147,7 +4019,6 @@ function truncate_userinfo(array $info) {
         'firstname'   => 100,
         'lastname'    => 100,
         'email'       => 100,
-        'icq'         =>  15,
         'phone1'      =>  20,
         'phone2'      =>  20,
         'institution' => 255,
@@ -4155,7 +4026,6 @@ function truncate_userinfo(array $info) {
         'address'     => 255,
         'city'        => 120,
         'country'     =>   2,
-        'url'         => 255,
     );
 
     // Apply where needed.
@@ -5438,8 +5308,7 @@ function remove_course_contents($courseid, $showfeedback = true, array $options 
     fulldelete($CFG->dataroot.'/'.$course->id);
 
     // Delete from cache to reduce the cache size especially makes sense in case of bulk course deletion.
-    $cachemodinfo = cache::make('core', 'coursemodinfo');
-    $cachemodinfo->delete($courseid);
+    course_modinfo::purge_course_cache($courseid);
 
     // Trigger a course content deleted event.
     $event = \core\event\course_content_deleted::create(array(
@@ -6295,8 +6164,10 @@ function email_to_user($user, $from, $subject, $messagetext, $messagehtml = '', 
             // The absolute (real) path is also fetched to ensure that comparisons to allowed paths are compared equally.
             $attachpath = str_replace('\\', '/', realpath($attachment));
 
-            // Add allowed paths to an array (also check if it's not empty).
-            $allowedpaths = array_filter([
+            // Build an array of all filepaths from which attachments can be added (normalised slashes, absolute/real path).
+            $allowedpaths = array_map(function(string $path): string {
+                return str_replace('\\', '/', realpath($path));
+            }, [
                 $CFG->cachedir,
                 $CFG->dataroot,
                 $CFG->dirroot,
@@ -6304,12 +6175,12 @@ function email_to_user($user, $from, $subject, $messagetext, $messagehtml = '', 
                 $CFG->tempdir,
                 $CFG->localrequestdir,
             ]);
+
             // Set addpath to true.
             $addpath = true;
+
             // Check if attachment includes one of the allowed paths.
-            foreach ($allowedpaths as $allowedpath) {
-                // Make sure both variables are normalised before comparing.
-                $allowedpath = str_replace('\\', '/', realpath($allowedpath));
+            foreach (array_filter($allowedpaths) as $allowedpath) {
                 // Set addpath to false if the attachment includes one of the allowed paths.
                 if (strpos($attachpath, $allowedpath) === 0) {
                     $addpath = false;
@@ -6550,7 +6421,6 @@ function send_confirmation_email($user, $confirmationurl = null) {
     $supportuser = core_user::get_support_user();
 
     $data = new stdClass();
-    $data->firstname = fullname($user);
     $data->sitename  = format_string($site->fullname);
     $data->admin     = generate_email_signoff();
 
@@ -8031,6 +7901,16 @@ function component_callback($component, $function, array $params = array(), $def
 
     $functionname = component_callback_exists($component, $function);
 
+    if ($params && (array_keys($params) !== range(0, count($params) - 1))) {
+        // PHP 8 allows to have associative arrays in the call_user_func_array() parameters but
+        // PHP 7 does not. Using associative arrays can result in different behavior in different PHP versions.
+        // See https://php.watch/versions/8.0/named-parameters#named-params-call_user_func_array
+        // This check can be removed when minimum PHP version for Moodle is raised to 8.
+        debugging('Parameters array can not be an associative array while Moodle supports both PHP 7 and PHP 8.',
+            DEBUG_DEVELOPER);
+        $params = array_values($params);
+    }
+
     if ($functionname) {
         // Function exists, so just return function result.
         $ret = call_user_func_array($functionname, $params);
@@ -8352,21 +8232,38 @@ function moodle_setlocale($locale='') {
  * Words are defined as things between whitespace.
  *
  * @category string
- * @param string $string The text to be searched for words.
+ * @param string $string The text to be searched for words. May be HTML.
  * @return int The count of words in the specified string
  */
 function count_words($string) {
+    // Before stripping tags, add a space after the close tag of anything that is not obviously inline.
+    // Also, br is a special case because it definitely delimits a word, but has no close tag.
+    $string = preg_replace('~
+            (                                   # Capture the tag we match.
+                </                              # Start of close tag.
+                (?!                             # Do not match any of these specific close tag names.
+                    a> | b> | del> | em> | i> |
+                    ins> | s> | small> |
+                    strong> | sub> | sup> | u>
+                )
+                \w+                             # But, apart from those execptions, match any tag name.
+                >                               # End of close tag.
+            |
+                <br> | <br\s*/>                 # Special cases that are not close tags.
+            )
+            ~x', '$1 ', $string); // Add a space after the close tag.
+    // Now remove HTML tags.
     $string = strip_tags($string);
     // Decode HTML entities.
     $string = html_entity_decode($string);
-    // Replace underscores (which are classed as word characters) with spaces.
-    $string = preg_replace('/_/u', ' ', $string);
-    // Remove any characters that shouldn't be treated as word boundaries.
-    $string = preg_replace('/[\'"’-]/u', '', $string);
-    // Remove dots and commas from within numbers only.
-    $string = preg_replace('/([0-9])[.,]([0-9])/u', '$1$2', $string);
 
-    return count(preg_split('/\w\b/u', $string)) - 1;
+    // Now, the word count is the number of blocks of characters separated
+    // by any sort of space. That seems to be the definition used by all other systems.
+    // To be precise about what is considered to separate words:
+    // * Anything that Unicode considers a 'Separator'
+    // * Anything that Unicode considers a 'Control character'
+    // * An em- or en- dash.
+    return count(preg_split('~[\p{Z}\p{Cc}—–]+~u', $string, -1, PREG_SPLIT_NO_EMPTY));
 }
 
 /**
@@ -8375,11 +8272,12 @@ function count_words($string) {
  * Letters are defined as chars not in tags and different from whitespace.
  *
  * @category string
- * @param string $string The text to be searched for letters.
+ * @param string $string The text to be searched for letters. May be HTML.
  * @return int The count of letters in the specified text.
  */
 function count_letters($string) {
     $string = strip_tags($string); // Tags are out now.
+    $string = html_entity_decode($string);
     $string = preg_replace('/[[:space:]]*/', '', $string); // Whitespace are out now.
 
     return core_text::strlen($string);
@@ -8792,8 +8690,9 @@ function format_float($float, $decimalpoints=1, $localized=true, $stripzeros=fal
     }
 
     $result = number_format($float, $decimalpoints, $separator, '');
-    if ($stripzeros) {
+    if ($stripzeros && $decimalpoints > 0) {
         // Remove zeros and final dot if not needed.
+        // However, only do this if there is a decimal point!
         $result = preg_replace('~(' . preg_quote($separator, '~') . ')?0+$~', '', $result);
     }
     return $result;
@@ -9284,7 +9183,7 @@ function remoteip_in_list($list) {
 function getremoteaddr($default='0.0.0.0') {
     global $CFG;
 
-    if (empty($CFG->getremoteaddrconf)) {
+    if (!isset($CFG->getremoteaddrconf)) {
         // This will happen, for example, before just after the upgrade, as the
         // user is redirected to the admin screen.
         $variablestoskip = GETREMOTEADDR_SKIP_DEFAULT;
@@ -10429,6 +10328,21 @@ function unserialize_array($expression) {
 }
 
 /**
+ * Safe method for unserializing given input that is expected to contain only a serialized instance of an stdClass object
+ *
+ * If any class type other than stdClass is included in the input string, it will not be instantiated and will be cast to an
+ * stdClass object. The initial cast to array, then back to object is to ensure we are always returning the correct type,
+ * otherwise we would return an instances of {@see __PHP_Incomplete_class} for malformed strings
+ *
+ * @param string $input
+ * @return stdClass
+ */
+function unserialize_object(string $input): stdClass {
+    $instance = (array) unserialize($input, ['allowed_classes' => [stdClass::class]]);
+    return (object) $instance;
+}
+
+/**
  * The lang_string class
  *
  * This special class is used to create an object representation of a string request.
@@ -10534,7 +10448,7 @@ class lang_string {
         // changes are not carried across.
         // To do this we always ensure $a or its properties/values are strings
         // and that any properties/values that arn't convertable are forgotten.
-        if (!empty($a)) {
+        if ($a !== null) {
             if (is_scalar($a)) {
                 $this->a = $a;
             } else if ($a instanceof lang_string) {
@@ -10636,10 +10550,14 @@ class lang_string {
     /**
      * Magic __set_state method used for var_export
      *
-     * @return string
+     * @param array $array
+     * @return self
      */
-    public function __set_state() {
-        return $this->get_string();
+    public static function __set_state(array $array): self {
+        $tmp = new lang_string($array['identifier'], $array['component'], $array['a'], $array['lang']);
+        $tmp->string = $array['string'];
+        $tmp->forcedstring = $array['forcedstring'];
+        return $tmp;
     }
 
     /**

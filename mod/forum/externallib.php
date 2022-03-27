@@ -674,7 +674,7 @@ class mod_forum_external extends external_api {
                     $discussion->usermodifiedfullname = null;
                     $discussion->usermodifiedpictureurl = null;
                 } else {
-                    $picturefields = explode(',', user_picture::fields());
+                    $picturefields = explode(',', implode(',', \core_user\fields::get_picture_fields()));
 
                     // Load user objects from the results of the query.
                     $user = new stdclass();
@@ -2179,7 +2179,7 @@ class mod_forum_external extends external_api {
      * @param   string $sortdirection
      * @return  array
      */
-    public static function get_discussion_posts_by_userid(int $userid = 0, int $cmid, ?string $sortby, ?string $sortdirection) {
+    public static function get_discussion_posts_by_userid(int $userid, int $cmid, ?string $sortby, ?string $sortdirection) {
         global $USER, $DB;
         // Validate the parameter.
         $params = self::validate_parameters(self::get_discussion_posts_by_userid_parameters(), [
@@ -2237,6 +2237,9 @@ class mod_forum_external extends external_api {
         $builtdiscussions = [];
         foreach ($discussionsummaries as $discussionsummary) {
             $discussion = $discussionsummary->get_discussion();
+            if (!$capabilitymanager->can_view_discussion($USER, $discussion)) {
+                continue;
+            }
             $posts = $postvault->get_posts_in_discussion_for_user_id(
                     $discussion->get_id(),
                     $user->id,
@@ -2694,11 +2697,11 @@ class mod_forum_external extends external_api {
         $updatepost->attachments = IGNORE_FILE_MERGE;
 
         // Prepare the post to be updated.
-        if (!empty($params['subject'])) {
+        if ($params['subject'] !== '') {
             $updatepost->subject = $params['subject'];
         }
 
-        if (!empty($params['message']) && !empty($params['messageformat'])) {
+        if ($params['message'] !== '' && isset($params['messageformat'])) {
             $updatepost->message       = $params['message'];
             $updatepost->messageformat = $params['messageformat'];
             $updatepost->messagetrust  = trusttext_trusted($modcontext);

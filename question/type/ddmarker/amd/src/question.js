@@ -16,8 +16,7 @@
 /**
  * Question class for drag and drop marker question type, used to support the question and preview pages.
  *
- * @package    qtype_ddmarker
- * @subpackage question
+ * @module     qtype_ddmarker/question
  * @copyright  2018 The Open University
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -42,6 +41,7 @@ define(['jquery', 'core/dragdrop', 'qtype_ddmarker/shapes', 'core/key_codes'], f
         this.shapes = [];
         this.shapeSVGs = [];
         this.isPrinting = false;
+        this.questionAnswer = {};
         if (readOnly) {
             this.getRoot().addClass('qtype_ddmarker-readonly');
         }
@@ -142,12 +142,57 @@ define(['jquery', 'core/dragdrop', 'qtype_ddmarker/shapes', 'core/key_codes'], f
                 for (var i = 0; i < coords.length; i++) {
                     var dragInDrop = drag.clone();
                     dragInDrop.data('pagex', coords[i].x).data('pagey', coords[i].y);
-                    thisQ.sendDragToDrop(dragInDrop, false);
+                    // We always save the coordinates in the 1:1 ratio.
+                    // So we need to set the scale ratio to 1 for the initial load.
+                    dragInDrop.data('scaleRatio', 1);
+                    thisQ.sendDragToDrop(dragInDrop, false, true);
                 }
                 thisQ.getDragClone(drag).addClass('active');
                 thisQ.cloneDragIfNeeded(drag);
             }
         });
+
+        // Save the question answer.
+        thisQ.questionAnswer = thisQ.getQuestionAnsweredValues();
+    };
+
+    /**
+     * Get the question answered values.
+     *
+     * @return {Object} Contain key-value with key is the input id and value is the input value.
+     */
+    DragDropMarkersQuestion.prototype.getQuestionAnsweredValues = function() {
+        let result = {};
+        this.getRoot().find('input.choices').each((i, inputNode) => {
+            result[inputNode.id] = inputNode.value;
+        });
+
+        return result;
+    };
+
+    /**
+     * Check if the question is being interacted or not.
+     *
+     * @return {boolean} Return true if the user has changed the question-answer.
+     */
+    DragDropMarkersQuestion.prototype.isQuestionInteracted = function() {
+        const oldAnswer = this.questionAnswer;
+        const newAnswer = this.getQuestionAnsweredValues();
+        let isInteracted = false;
+
+        // First, check both answers have the same structure or not.
+        if (JSON.stringify(newAnswer) !== JSON.stringify(oldAnswer)) {
+            isInteracted = true;
+            return isInteracted;
+        }
+        // Check the values.
+        Object.keys(newAnswer).forEach(key => {
+            if (newAnswer[key] !== oldAnswer[key]) {
+                isInteracted = true;
+            }
+        });
+
+        return isInteracted;
     };
 
     /**
@@ -303,6 +348,10 @@ define(['jquery', 'core/dragdrop', 'qtype_ddmarker/shapes', 'core/key_codes'], f
             items.each(function() {
                 var drag = $(this);
                 if (!drag.hasClass('beingdragged')) {
+                    if (drag.data('scaleRatio') !== bgRatio) {
+                        // The scale ratio for the draggable item was changed. We need to update that.
+                        drag.data('pagex', drag.offset().left).data('pagey', drag.offset().top);
+                    }
                     var dragXY = new Shapes.Point(drag.data('pagex'), drag.data('pagey'));
                     if (thiQ.coordsInBgImg(dragXY)) {
                         var bgImgXY = thiQ.convertToBgImgXY(dragXY);
@@ -314,6 +363,12 @@ define(['jquery', 'core/dragdrop', 'qtype_ddmarker/shapes', 'core/key_codes'], f
         }
 
         this.getRoot().find('input.choice' + choiceNo).val(coords.join(';'));
+        if (this.isQuestionInteracted()) {
+            // The user has interacted with the draggable items. We need to mark the form as dirty.
+            questionManager.handleFormDirty();
+            // Save the new answered value.
+            this.questionAnswer = this.getQuestionAnsweredValues();
+        }
     };
 
     /**
@@ -550,9 +605,10 @@ define(['jquery', 'core/dragdrop', 'qtype_ddmarker/shapes', 'core/key_codes'], f
      * Animate a drag item into a given place.
      *
      * @param {jQuery} drag the item to place.
-     * @param {boolean} isScaling Scaling or not
+     * @param {boolean} isScaling Scaling or not.
+     * @param {boolean} initialLoad Whether it is the initial load or not.
      */
-    DragDropMarkersQuestion.prototype.sendDragToDrop = function(drag, isScaling) {
+    DragDropMarkersQuestion.prototype.sendDragToDrop = function(drag, isScaling, initialLoad = false) {
         var dropArea = this.dropArea(),
             bgRatio = this.bgRatio();
         drag.removeClass('beingdragged').removeClass('unneeded');
@@ -563,6 +619,11 @@ define(['jquery', 'core/dragdrop', 'qtype_ddmarker/shapes', 'core/key_codes'], f
         } else {
             drag.data('originX', dragXY.x).data('originY', dragXY.y);
             drag.css('left', dragXY.x * bgRatio).css('top', dragXY.y * bgRatio);
+        }
+        // We need to save the original scale ratio for each draggable item.
+        if (!initialLoad) {
+            // Only set the scale ratio for a current being-dragged item, not for the initial loading.
+            drag.data('scaleRatio', bgRatio);
         }
         dropArea.append(drag);
         this.handleElementScale(drag, 'left top');
@@ -678,6 +739,12 @@ define(['jquery', 'core/dragdrop', 'qtype_ddmarker/shapes', 'core/key_codes'], f
         eventHandlersInitialised: false,
 
         /**
+         * {Object} ensures that the marker event handlers are only initialised once per question,
+         * indexed by containerId (id on the .que div).
+         */
+        markerEventHandlersInitialised: {},
+
+        /**
          * {boolean} is printing or not.
          */
         isPrinting: false,
@@ -706,15 +773,23 @@ define(['jquery', 'core/dragdrop', 'qtype_ddmarker/shapes', 'core/key_codes'], f
                 questionManager.setupEventHandlers();
                 questionManager.eventHandlersInitialised = true;
             }
+            if (!questionManager.markerEventHandlersInitialised.hasOwnProperty(containerId)) {
+                questionManager.markerEventHandlersInitialised[containerId] = true;
+                // We do not use the body event here to prevent the other event on Mobile device, such as scroll event.
+                var questionContainer = document.getElementById(containerId);
+                if (questionContainer.classList.contains('ddmarker') &&
+                    !questionContainer.classList.contains('qtype_ddmarker-readonly')) {
+                    // TODO: Convert all the jQuery selectors and events to native Javascript.
+                    questionManager.addEventHandlersToMarker($(questionContainer).find('div.draghomes .marker'));
+                    questionManager.addEventHandlersToMarker($(questionContainer).find('div.droparea .marker'));
+                }
+            }
         },
 
         /**
          * Set up the event handlers that make this question type work. (Done once per page.)
          */
         setupEventHandlers: function() {
-            // We do not use the body event here to prevent the other event on Mobile device, such as scroll event.
-            questionManager.addEventHandlersToMarker($('.que.ddmarker:not(.qtype_ddmarker-readonly) div.draghomes .marker'));
-            questionManager.addEventHandlersToMarker($('.que.ddmarker:not(.qtype_ddmarker-readonly) div.droparea .marker'));
             $(window).on('resize', function() {
                 questionManager.handleWindowResize(false);
             });
@@ -818,6 +893,15 @@ define(['jquery', 'core/dragdrop', 'qtype_ddmarker/shapes', 'core/key_codes'], f
         getQuestionForEvent: function(e) {
             var containerId = $(e.currentTarget).closest('.que.ddmarker').attr('id');
             return questionManager.questions[containerId];
+        },
+
+        /**
+         * Handle when the form is dirty.
+         */
+        handleFormDirty: function() {
+            if (typeof M.core_formchangechecker !== 'undefined') {
+                M.core_formchangechecker.set_form_changed();
+            }
         }
     };
 

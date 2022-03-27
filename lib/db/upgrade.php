@@ -2391,5 +2391,296 @@ function xmldb_main_upgrade($oldversion) {
         upgrade_main_savepoint(true, 2020111500.01);
     }
 
+    if ($oldversion < 2021013100.00) {
+        $DB->delete_records_select('event', "eventtype = 'category' AND categoryid = 0 AND userid <> 0");
+
+        upgrade_main_savepoint(true, 2021013100.00);
+    }
+
+    if ($oldversion < 2021021100.01) {
+        // Define field visibility to be added to contentbank_content.
+        $table = new xmldb_table('contentbank_content');
+        $field = new xmldb_field('visibility', XMLDB_TYPE_INTEGER, '1', null, XMLDB_NOTNULL, null, '1', 'contextid');
+
+        // Conditionally launch add field visibility.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021021100.01);
+    }
+
+    if ($oldversion < 2021021600.00) {
+
+        // We are going to remove the field 'hidepicture' from the groups
+        // so we need to remove the pictures from those groups. But we prevent
+        // the execution twice because this could be executed again when upgrading
+        // to different versions.
+        if ($dbman->field_exists('groups', 'hidepicture')) {
+
+            $sql = "SELECT g.id, g.courseid, ctx.id AS contextid
+                       FROM {groups} g
+                       JOIN {context} ctx
+                         ON ctx.instanceid = g.courseid
+                        AND ctx.contextlevel = :contextlevel
+                      WHERE g.hidepicture = 1";
+
+            // Selecting all the groups that have hide picture enabled, and organising them by context.
+            $groupctx = [];
+            $records = $DB->get_recordset_sql($sql, ['contextlevel' => CONTEXT_COURSE]);
+            foreach ($records as $record) {
+                if (!isset($groupctx[$record->contextid])) {
+                    $groupctx[$record->contextid] = [];
+                }
+                $groupctx[$record->contextid][] = $record->id;
+            }
+            $records->close();
+
+            // Deleting the group files.
+            $fs = get_file_storage();
+            foreach ($groupctx as $contextid => $groupids) {
+                list($in, $inparams) = $DB->get_in_or_equal($groupids, SQL_PARAMS_NAMED);
+                $fs->delete_area_files_select($contextid, 'group', 'icon', $in, $inparams);
+            }
+
+            // Updating the database to remove picture from all those groups.
+            $sql = "UPDATE {groups} SET picture = :pic WHERE hidepicture = :hide";
+            $DB->execute($sql, ['pic' => 0, 'hide' => 1]);
+        }
+
+        // Define field hidepicture to be dropped from groups.
+        $table = new xmldb_table('groups');
+        $field = new xmldb_field('hidepicture');
+
+        // Conditionally launch drop field hidepicture.
+        if ($dbman->field_exists($table, $field)) {
+            $dbman->drop_field($table, $field);
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021021600.00);
+    }
+
+    if ($oldversion < 2021022600.01) {
+        // Get all the external backpacks and update the sortorder column, to avoid repeated/wrong values. As sortorder was not
+        // used since now, the id column will be the criteria to follow for re-ordering them with a valid value.
+        $i = 1;
+        $records = $DB->get_records('badge_external_backpack', null, 'id ASC');
+        foreach ($records as $record) {
+            $record->sortorder = $i++;
+            $DB->update_record('badge_external_backpack', $record);
+        }
+
+        upgrade_main_savepoint(true, 2021022600.01);
+    }
+
+    if ($oldversion < 2021030500.01) {
+        // The $CFG->badges_site_backpack setting has been removed because it's not required anymore. From now, the default backpack
+        // will be the one with lower sortorder value.
+        unset_config('badges_site_backpack');
+
+        upgrade_main_savepoint(true, 2021030500.01);
+    }
+
+    if ($oldversion < 2021031200.01) {
+
+        // Define field type to be added to oauth2_issuer.
+        $table = new xmldb_table('oauth2_issuer');
+        $field = new xmldb_field('servicetype', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'requireconfirmation');
+
+        // Conditionally launch add field type.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Set existing values to the proper servicetype value.
+        // It's not critical if the servicetype column doesn't contain the proper value for Google, Microsoft, Facebook or
+        // Nextcloud services because, for now, this value is used for services using different discovery method.
+        // However, let's try to upgrade it using the default value for the baseurl or image. If any of these default values
+        // have been changed, the servicetype column will remain NULL.
+        $recordset = $DB->get_recordset('oauth2_issuer');
+        foreach ($recordset as $record) {
+            if ($record->baseurl == 'https://accounts.google.com/') {
+                $record->servicetype = 'google';
+                $DB->update_record('oauth2_issuer', $record);
+            } else if ($record->image == 'https://www.microsoft.com/favicon.ico') {
+                $record->servicetype = 'microsoft';
+                $DB->update_record('oauth2_issuer', $record);
+            } else if ($record->image == 'https://facebookbrand.com/wp-content/uploads/2016/05/flogo_rgb_hex-brc-site-250.png') {
+                $record->servicetype = 'facebook';
+                $DB->update_record('oauth2_issuer', $record);
+            } else if ($record->image == 'https://nextcloud.com/wp-content/themes/next/assets/img/common/favicon.png?x16328') {
+                $record->servicetype = 'nextcloud';
+                $DB->update_record('oauth2_issuer', $record);
+            }
+        }
+        $recordset->close();
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021031200.01);
+    }
+
+    if ($oldversion < 2021033100.00) {
+        // Define field 'showactivitydates' to be added to course table.
+        $table = new xmldb_table('course');
+        $field = new xmldb_field('showactivitydates', XMLDB_TYPE_INTEGER, '1', null,
+            XMLDB_NOTNULL, null, '0', 'originalcourseid');
+
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021033100.00);
+    }
+
+    if ($oldversion < 2021033100.01) {
+        // Define field 'showcompletionconditions' to be added to course.
+        $table = new xmldb_table('course');
+        $field = new xmldb_field('showcompletionconditions', XMLDB_TYPE_INTEGER, '1', null,
+            XMLDB_NOTNULL, null, '1', 'completionnotify');
+
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021033100.01);
+    }
+
+    if ($oldversion < 2021041300.01) {
+
+        // Define field enabled to be added to h5p_libraries.
+        $table = new xmldb_table('h5p_libraries');
+        $field = new xmldb_field('enabled', XMLDB_TYPE_INTEGER, '1', null, null, null, '1', 'example');
+
+        // Conditionally launch add field enabled.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021041300.01);
+    }
+
+    if ($oldversion < 2021042100.00) {
+
+        // Define field loginpagename to be added to oauth2_issuer.
+        $table = new xmldb_table('oauth2_issuer');
+        $field = new xmldb_field('loginpagename', XMLDB_TYPE_CHAR, '255', null, null, null, null, 'servicetype');
+
+        // Conditionally launch add field loginpagename.
+        if (!$dbman->field_exists($table, $field)) {
+            $dbman->add_field($table, $field);
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021042100.00);
+    }
+
+    if ($oldversion < 2021042100.01) {
+        require_once($CFG->dirroot . '/user/profile/field/social/upgradelib.php');
+        $table = new xmldb_table('user');
+        $tablecolumns = ['icq', 'skype', 'aim', 'yahoo', 'msn', 'url'];
+
+        foreach ($tablecolumns as $column) {
+            $field = new xmldb_field($column);
+            if ($dbman->field_exists($table, $field)) {
+                user_profile_social_moveto_profilefield($column);
+                $dbman->drop_field($table, $field);
+            }
+        }
+
+        // Update all module availability if it relies on the old user fields.
+        user_profile_social_update_module_availability();
+
+        // Remove field mapping for oauth2.
+        $DB->delete_records('oauth2_user_field_mapping', array('internalfield' => 'url'));
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021042100.01);
+    }
+
+    if ($oldversion < 2021042100.02) {
+        require_once($CFG->libdir . '/db/upgradelib.php');
+
+        // Check if this site has executed the problematic upgrade steps.
+        $needsfixing = upgrade_calendar_site_status(false);
+
+        // Only queue the task if this site has been affected by the problematic upgrade step.
+        if ($needsfixing) {
+
+            // Create adhoc task to search and recover orphaned calendar events.
+            $record = new \stdClass();
+            $record->classname = '\core\task\calendar_fix_orphaned_events';
+
+            // Next run time based from nextruntime computation in \core\task\manager::queue_adhoc_task().
+            $nextruntime = time() - 1;
+            $record->nextruntime = $nextruntime;
+            $DB->insert_record('task_adhoc', $record);
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021042100.02);
+    }
+
+    if ($oldversion < 2021042400.00) {
+        // Changing the default of field showcompletionconditions on table course to 0.
+        $table = new xmldb_table('course');
+        $field = new xmldb_field('showcompletionconditions', XMLDB_TYPE_INTEGER, '1', null, null, null, null, 'showactivitydates');
+
+        // Launch change of nullability for field showcompletionconditions.
+        $dbman->change_field_notnull($table, $field);
+
+        // Launch change of default for field showcompletionconditions.
+        $dbman->change_field_default($table, $field);
+
+        // Set showcompletionconditions to null for courses which don't track completion.
+        $sql = "UPDATE {course}
+                   SET showcompletionconditions = null
+                 WHERE enablecompletion <> 1";
+        $DB->execute($sql);
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021042400.00);
+    }
+
+    if ($oldversion < 2021043000.01) {
+        // Remove usemodchooser user preference for every user.
+        $DB->delete_records('user_preferences', ['name' => 'usemodchooser']);
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021043000.01);
+    }
+
+    // Automatically generated Moodle v3.11.0 release upgrade line.
+    // Put any upgrade step following this.
+
+    if ($oldversion < 2021051700.03) {
+
+        // Define index name (not unique) to be added to user_preferences.
+        $table = new xmldb_table('user_preferences');
+        $index = new xmldb_index('name', XMLDB_INDEX_NOTUNIQUE, ['name']);
+
+        // Conditionally launch add index name.
+        if (!$dbman->index_exists($table, $index)) {
+            $dbman->add_index($table, $index);
+        }
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021051700.03);
+    }
+
+    if ($oldversion < 2021051700.05) {
+        // Update the externalfield to be larger.
+        $table = new xmldb_table('oauth2_user_field_mapping');
+        $field = new xmldb_field('externalfield', XMLDB_TYPE_CHAR, '500', null, XMLDB_NOTNULL, false, null, 'issuerid');
+        $dbman->change_field_type($table, $field);
+
+        // Main savepoint reached.
+        upgrade_main_savepoint(true, 2021051700.05);
+    }
+
     return true;
 }

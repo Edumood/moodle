@@ -711,6 +711,41 @@ EOD;
         $this->assertSame('id', $composed['columns'][1]);
     }
 
+    /**
+     * Let's verify get_indexes() when we mix null and not null columns in unique indexes.
+     *
+     * Some databases, for unique indexes of this type, need to create function indexes to
+     * provide cross-db behaviour. Here we check that those indexes don't break get_indexes().
+     *
+     * Note that, strictly speaking, unique indexes on null columns are far from ideal. Both
+     * conceptually and also in practice, because they cause DBs to use full scans in a
+     * number of situations. But if we support them, we need to ensure get_indexes() work on them.
+     */
+    public function test_get_indexes_unique_mixed_nullability() {
+        $DB = $this->tdb;
+        $dbman = $this->tdb->get_manager();
+        $table = $this->get_test_table();
+        $tablename = $table->getName();
+
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('nullable01', XMLDB_TYPE_INTEGER, 10, null, null, null, null);
+        $table->add_field('nullable02', XMLDB_TYPE_INTEGER, 10, null, null, null, null);
+        $table->add_field('nonullable01', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('nonullable02', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, array('id'));
+        $indexcolumns = ['nullable01', 'nonullable01', 'nullable02', 'nonullable02'];
+        $table->add_index('course-id', XMLDB_INDEX_UNIQUE, $indexcolumns);
+        $dbman->create_table($table);
+
+        $indexes = $DB->get_indexes($tablename);
+        $this->assertIsArray($indexes);
+        $this->assertCount(1, $indexes);
+
+        $index = array_shift($indexes);
+        $this->assertTrue($index['unique']);
+        $this->assertSame($indexcolumns, $index['columns']);
+    }
+
     public function test_get_columns() {
         $DB = $this->tdb;
         $dbman = $this->tdb->get_manager();
@@ -4141,6 +4176,47 @@ EOD;
         // $this->assertEquals(3, count($records), 'Accent insensitive LIKE searches may not be supported in all databases, this is not a problem.');
     }
 
+    /**
+     * Test DML libraries sql_like_escape method
+     */
+    public function test_sql_like_escape(): void {
+        $DB = $this->tdb;
+        $dbman = $DB->get_manager();
+
+        $table = $this->get_test_table();
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('name', XMLDB_TYPE_CHAR, '255', null, null, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $dbman->create_table($table);
+
+        $tablename = $table->getName();
+
+        // Two of the records contain LIKE characters (%_), plus square brackets supported only by SQL Server (and '^-' which
+        // should be ignored by SQL Server given they only have meaning inside square brackets).
+        $DB->insert_record($tablename, (object) ['name' => 'lionel']);
+        $DB->insert_record($tablename, (object) ['name' => 'lionel%_^-[0]']);
+        $DB->insert_record($tablename, (object) ['name' => 'rick']);
+        $DB->insert_record($tablename, (object) ['name' => 'rick%_^-[0]']);
+
+        $select = $DB->sql_like('name', ':namelike');
+        $params = ['namelike' => '%' . $DB->sql_like_escape('%_^-[0]')];
+
+        // All drivers should return our two records containing wildcard characters.
+        $this->assertEqualsCanonicalizing([
+            'lionel%_^-[0]',
+            'rick%_^-[0]',
+        ], $DB->get_fieldset_select($tablename, 'name', $select, $params));
+
+        // Test for unbalanced brackets.
+        $select = $DB->sql_like('name', ':namelike');
+        $params = ['namelike' => '%' . $DB->sql_like_escape('[') . '%'];
+
+        $this->assertEqualsCanonicalizing([
+            'lionel%_^-[0]',
+            'rick%_^-[0]',
+        ], $DB->get_fieldset_select($tablename, 'name', $select, $params));
+    }
+
     public function test_coalesce() {
         $DB = $this->tdb;
 
@@ -4295,6 +4371,141 @@ EOD;
         $this->assertEquals($expected, $result);
     }
 
+    /**
+     * Test DML libraries sql_group_contact method
+     */
+    public function test_group_concat(): void {
+        $DB = $this->tdb;
+        $dbman = $DB->get_manager();
+
+        $table = $this->get_test_table();
+        $table->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $table->add_field('intfield', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $table->add_field('charfield', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $table->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $dbman->create_table($table);
+
+        $tablename = $table->getName();
+        $DB->insert_record($tablename, (object) ['intfield' => 10, 'charfield' => 'uno']);
+        $DB->insert_record($tablename, (object) ['intfield' => 20, 'charfield' => 'dos']);
+        $DB->insert_record($tablename, (object) ['intfield' => 20, 'charfield' => 'tres']);
+        $DB->insert_record($tablename, (object) ['intfield' => 30, 'charfield' => 'tres']);
+
+        // Test charfield => concatenated intfield ASC.
+        $fieldsql = $DB->sql_group_concat('intfield', ', ', 'intfield ASC');
+        $sql = "SELECT charfield, {$fieldsql} AS falias
+                  FROM {{$tablename}}
+              GROUP BY charfield";
+
+        $this->assertEquals([
+            'dos' => '20',
+            'tres' => '20, 30',
+            'uno' => '10',
+        ], $DB->get_records_sql_menu($sql));
+
+        // Test charfield => concatenated intfield DESC.
+        $fieldsql = $DB->sql_group_concat('intfield', ', ', 'intfield DESC');
+        $sql = "SELECT charfield, {$fieldsql} AS falias
+                  FROM {{$tablename}}
+              GROUP BY charfield";
+
+        $this->assertEquals([
+            'dos' => '20',
+            'tres' => '30, 20',
+            'uno' => '10',
+        ], $DB->get_records_sql_menu($sql));
+
+        // Test intfield => concatenated charfield ASC.
+        $fieldsql = $DB->sql_group_concat('charfield', ', ', 'charfield ASC');
+        $sql = "SELECT intfield, {$fieldsql} AS falias
+                  FROM {{$tablename}}
+              GROUP BY intfield";
+
+        $this->assertEquals([
+            10 => 'uno',
+            20 => 'dos, tres',
+            30 => 'tres',
+        ], $DB->get_records_sql_menu($sql));
+
+        // Test intfield => concatenated charfield DESC.
+        $fieldsql = $DB->sql_group_concat('charfield', ', ', 'charfield DESC');
+        $sql = "SELECT intfield, {$fieldsql} AS falias
+                  FROM {{$tablename}}
+              GROUP BY intfield";
+
+        $this->assertEquals([
+            10 => 'uno',
+            20 => 'tres, dos',
+            30 => 'tres',
+        ], $DB->get_records_sql_menu($sql));
+
+        // Assert expressions with parameters can also be used.
+        $fieldexpr = $DB->sql_concat(':greeting', 'charfield');
+        $fieldsql = $DB->sql_group_concat($fieldexpr, ', ', 'charfield ASC');
+        $sql = "SELECT intfield, {$fieldsql} AS falias
+                  FROM {{$tablename}}
+              GROUP BY intfield";
+        $this->assertEquals([
+            10 => 'Hola uno',
+            20 => 'Hola dos, Hola tres',
+            30 => 'Hola tres',
+        ], $DB->get_records_sql_menu($sql, ['greeting' => 'Hola ']));
+    }
+
+    /**
+     * Test DML libraries sql_group_contact method joining tables, aggregating data from each
+     */
+    public function test_group_concat_join_tables(): void {
+        $DB = $this->tdb;
+        $dbman = $DB->get_manager();
+
+        $tableparent = $this->get_test_table('parent');
+        $tableparent->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $tableparent->add_field('name', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $tableparent->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $dbman->create_table($tableparent);
+
+        $tablechild = $this->get_test_table('child');
+        $tablechild->add_field('id', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, XMLDB_SEQUENCE, null);
+        $tablechild->add_field('parentid', XMLDB_TYPE_INTEGER, '10', null, XMLDB_NOTNULL, null, '0');
+        $tablechild->add_field('name', XMLDB_TYPE_CHAR, '255', null, XMLDB_NOTNULL, null, null);
+        $tablechild->add_key('primary', XMLDB_KEY_PRIMARY, ['id']);
+        $tablechild->add_key('parentid', XMLDB_KEY_FOREIGN, ['parentid'], $tableparent->getName(), ['id']);
+        $dbman->create_table($tablechild);
+
+        $tableparentname = $tableparent->getName();
+        $tablechildname = $tablechild->getName();
+
+        $parentone = $DB->insert_record($tableparentname, (object) ['name' => 'Alice']);
+        $DB->insert_record($tablechildname, (object) ['parentid' => $parentone, 'name' => 'Eve']);
+        $DB->insert_record($tablechildname, (object) ['parentid' => $parentone, 'name' => 'Charlie']);
+
+        $parenttwo = $DB->insert_record($tableparentname, (object) ['name' => 'Bob']);
+        $DB->insert_record($tablechildname, (object) ['parentid' => $parenttwo, 'name' => 'Dan']);
+        $DB->insert_record($tablechildname, (object) ['parentid' => $parenttwo, 'name' => 'Grace']);
+
+        $tableparentalias = 'p';
+        $tablechildalias = 'c';
+
+        $fieldsql = $DB->sql_group_concat("{$tablechildalias}.name", ', ', "{$tablechildalias}.name ASC");
+
+        $sql = "SELECT {$tableparentalias}.name, {$fieldsql} AS falias
+                  FROM {{$tableparentname}} {$tableparentalias}
+                  JOIN {{$tablechildname}} {$tablechildalias} ON {$tablechildalias}.parentid = {$tableparentalias}.id
+              GROUP BY {$tableparentalias}.name";
+
+        $this->assertEqualsCanonicalizing([
+            (object) [
+                'name' => 'Alice',
+                'falias' => 'Charlie, Eve',
+            ],
+            (object) [
+                'name' => 'Bob',
+                'falias' => 'Dan, Grace',
+            ],
+        ], $DB->get_records_sql($sql));
+    }
+
     public function test_sql_fullname() {
         $DB = $this->tdb;
         $sql = "SELECT ".$DB->sql_fullname(':first', ':last')." AS fullname ".$DB->sql_null_from_clause();
@@ -4360,7 +4571,7 @@ EOD;
             $this->assertInstanceOf('coding_exception', $e);
         } catch (Error $error) {
             // PHP 7.1 throws Error even earlier.
-            $this->assertRegExp('/Too few arguments to function/', $error->getMessage());
+            $this->assertMatchesRegularExpression('/Too few arguments to function/', $error->getMessage());
         }
 
         // Cover the function using placeholders in all positions.
@@ -5861,6 +6072,9 @@ class moodle_database_for_testing extends moodle_database {
     public function delete_records_select($table, $select, array $params=null) {}
     public function sql_concat() {}
     public function sql_concat_join($separator="' '", $elements=array()) {}
+    public function sql_group_concat(string $field, string $separator = ', ', string $sort = ''): string {
+        return '';
+    }
     public function sql_substr($expr, $start, $length=false) {}
     public function begin_transaction() {}
     public function commit_transaction() {}

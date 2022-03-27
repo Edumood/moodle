@@ -122,7 +122,6 @@ $string['afterresource'] = 'After resource "{$a}"';
 $string['aftersection'] = 'After section "{$a}"';
 $string['again'] = 'again';
 $string['agelocationverification'] = 'Age and location verification';
-$string['aimid'] = 'AIM ID';
 $string['ajaxuse'] = 'AJAX and Javascript';
 $string['all'] = 'All';
 $string['allactions'] = 'All actions';
@@ -344,7 +343,6 @@ $string['courseformats'] = 'Course formats';
 $string['courseformatoptions'] = 'Formatting options for {$a}';
 $string['courseformatudpate'] = 'Update format';
 $string['courseprofiles'] = 'Course profiles';
-$string['coursepreferences'] = 'Course preferences';
 $string['coursegrades'] = 'Course grades';
 $string['coursehelpcategory'] = 'Position the course on the course listing and may make it easier for students to find it.';
 $string['coursehelpforce'] = 'Force the course group mode to every activity in the course.';
@@ -481,8 +479,8 @@ $string['defaultcoursesummary'] = 'Write a concise and interesting paragraph her
 $string['defaultcourseteacher'] = 'Teacher';
 $string['defaultcourseteacherdescription'] = 'Teachers can do anything within a course, including changing the activities and grading students.';
 $string['defaultcourseteachers'] = 'Teachers';
-$string['defaulthomepageuser'] = 'Home page';
-$string['defaulthomepageuser_help'] = 'Your home page is the first link in the navigation.';
+$string['defaulthomepageuser'] = 'Start page';
+$string['defaulthomepageuser_help'] = 'Which page should you be redirected to after logging in to the site?';
 $string['delete'] = 'Delete';
 $string['deleteablock'] = 'Delete a block';
 $string['deleteall'] = 'Delete all';
@@ -610,7 +608,7 @@ $string['emailalreadysent'] = 'A password reset email has already been sent. Ple
 $string['emailactive'] = 'Email activated';
 $string['emailagain'] = 'Email (again)';
 $string['emailconfirm'] = 'Confirm your account';
-$string['emailconfirmation'] = 'Hi {$a->firstname},
+$string['emailconfirmation'] = 'Hi,
 
 A new account has been requested at \'{$a->sitename}\'
 using your email address.
@@ -648,7 +646,10 @@ $string['emaildisable'] = 'This email address is disabled';
 $string['emaildisableclick'] = 'Click here to disable all email from being sent to this address';
 $string['emaildisplay'] = 'Email display';
 $string['emaildisplay_help'] = 'Privileged users (such as teachers and managers) will always be able to see your email address.';
-$string['emaildisplaycourse'] = 'Allow only other course members to see my email address';
+$string['emaildisplaycourse'] = 'Allow only other course participants to see my email address';
+$string['emaildisplaycoursemembersonly'] = '(Visible to other course participants)';
+$string['emaildisplayeveryone'] = '(Visible to everyone)';
+$string['emaildisplayhide'] = '(Hidden from all non-privileged users)';
 $string['emaildisplayno'] = 'Hide my email address from non-privileged users';
 $string['emaildisplayyes'] = 'Allow everyone to see my email address';
 $string['emailenable'] = 'This email address is enabled';
@@ -680,7 +681,7 @@ line at the top of your web browser window.
 If you need help, please contact the site administrator,
 {$a->admin}';
 $string['emailpasswordconfirmationsubject'] = '{$a}: Change password confirmation';
-$string['emailpasswordconfirmmaybesent'] = '<p>If you supplied a correct username or email address then an email should have been sent to you.</p>
+$string['emailpasswordconfirmmaybesent'] = '<p>If you supplied a correct username or unique email address then an email should have been sent to you.</p>
    <p>It contains easy instructions to confirm and complete this password change.
 If you continue to have difficulty, please contact the site administrator.</p>';
 $string['emailpasswordconfirmnoemail'] = '<p>The user account you specified does not have a recorded email address.</p>
@@ -749,8 +750,9 @@ $string['emojicategoryanimalsnature'] = 'Animals & nature';
 $string['emojicategoryflags'] = 'Flags';
 $string['emojicategoryfooddrink'] = 'Food & drink';
 $string['emojicategoryobjects'] = 'Objects';
+$string['emojicategorypeoplebody'] = 'People & body';
 $string['emojicategoryrecent'] = 'Recent';
-$string['emojicategorysmileyspeople'] = 'Smileys & people';
+$string['emojicategorysmileysemotion'] = 'Smileys & emotion';
 $string['emojicategorysymbols'] = 'Symbols';
 $string['emojicategorytravelplaces'] = 'Travel & places';
 $string['emptydragdropregion'] = 'empty region';
@@ -939,8 +941,9 @@ This program is free software: you can redistribute it and/or modify it under th
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
 
 See the Moodle License information page for full details: https://docs.moodle.org/dev/License';
-$string['grade'] = 'Grade';
 $string['grades'] = 'Grades';
+$string['gradenoun'] = 'Grade';
+$string['gradeverb'] = 'Grade';
 $string['gravatarenabled'] = '<a href="https://www.gravatar.com/">Gravatar</a> has been enabled for this site. If you don\'t upload a profile picture Moodle will attempt to load a profile picture for you from Gravatar.';
 $string['group'] = 'Group';
 $string['groupadd'] = 'Add new group';
@@ -989,7 +992,6 @@ $string['hideadvancedsettings'] = 'Hide advanced settings';
 $string['hidechartdata'] = 'Hide chart data';
 $string['hidefromstudents'] = 'Hide from students';
 $string['hideoncoursepage'] = 'Make available but not shown on course page';
-$string['hidepicture'] = 'Hide picture';
 $string['hidesection'] = 'Hide section {$a}';
 $string['hidesettings'] = 'Hide settings';
 $string['hideshowblocks'] = 'Hide or show blocks';
@@ -1044,7 +1046,6 @@ $string['eventcontentviewed'] = 'Content viewed';
 $string['filter'] = 'Filter';
 $string['filteroption'] = '{$a->criteria}: {$a->value}';
 $string['filters'] = 'Filters';
-$string['icqnumber'] = 'ICQ number';
 $string['icon'] = 'Icon';
 $string['idnumber'] = 'ID number';
 $string['idnumbercourse'] = 'Course ID number';
@@ -1185,6 +1186,7 @@ $string['loginstepsnone'] = '<p>Hi!</p>
 <p>If someone else has already chosen your username then you\'ll have to try again using a different username.</p>';
 $string['loginto'] = 'Log in to {$a}';
 $string['loginagain'] = 'Log in again';
+$string['logoof'] = 'Logo of {$a}';
 $string['logout'] = 'Log out';
 $string['logoutconfirm'] = 'Do you really want to log out?';
 $string['logs'] = 'Logs';
@@ -1313,7 +1315,7 @@ $string['modulesetup'] = 'Setting up module tables';
 $string['modulesuccess'] = '{$a} tables have been set up correctly';
 $string['modulesused'] = 'Modules used';
 $string['moodledocs'] = 'Moodle Docs';
-$string['moodledocslink'] = 'Moodle Docs for this page';
+$string['moodledocslink'] = 'Help and documentation';
 $string['moodleversion'] = 'Moodle version';
 $string['moodlerelease'] = 'Moodle release';
 $string['more'] = 'more';
@@ -1349,7 +1351,6 @@ $string['moveselectedcategoriesto'] = 'Move selected categories to';
 $string['moveselectedcoursesto'] = 'Move selected courses to...';
 $string['movetoanotherfolder'] = 'Move to another folder';
 $string['moveup'] = 'Move up';
-$string['msnid'] = 'MSN ID';
 $string['mustconfirm'] = 'You need to confirm your account';
 $string['mustchangepassword'] = 'The new password must be different than the current one';
 $string['mycourses'] = 'My courses';
@@ -1476,7 +1477,7 @@ $string['normalfilter'] = 'Normal search';
 $string['nosite'] = 'Could not find site-level course';
 $string['nostudentsfound'] = 'No {$a} found';
 $string['nostudentsingroup'] = 'There are no students in this group yet';
-$string['nostudentsyet'] = 'No students enrolled in this course yet';
+$string['nostudentsyet'] = 'There are no students enrolled in this course.';
 $string['nosuchemail'] = 'No such email address';
 $string['notavailable'] = 'Not available';
 $string['notavailablecourse'] = '{$a} is not available';
@@ -1523,6 +1524,7 @@ $string['numyears'] = '{$a} years';
 $string['ok'] = 'OK';
 $string['oldpassword'] = 'Current password';
 $string['olduserdirectory'] = 'This is the OLD users directory, and is no longer needed. You may safely delete it. The files it contains have been copied to the NEW user directory.';
+$string['opensinnewwindow'] = 'Opens in new window';
 $string['optional'] = 'optional';
 $string['options'] = 'options';
 $string['order'] = 'Order';
@@ -1705,7 +1707,6 @@ for important notifications such as security alerts and new releases of Moodle.<
 <p>If you choose, you can allow your site name, country and URL to be added to the public list of Moodle Sites.</p>
 <p>All new registrations are verified manually before they are added to the list, but once you are added you can update your registration (and your entry on the public list) at any time by resubmitting this form.</p>';
 $string['registrationinfotitle'] = 'Registration information';
-$string['registrationno'] = 'No, I do not wish to receive any emails';
 $string['registrationsend'] = 'Send registration information to moodle.org';
 $string['registrationyes'] = 'Yes, notify me of new Moodle releases, security alerts and other important news';
 $string['reject'] = 'Reject';
@@ -1900,6 +1901,8 @@ $string['shortnameuser'] = 'User short name';
 $string['shortsitename'] = 'Short name for site (eg single word)';
 $string['show'] = 'Show';
 $string['showactions'] = 'Show actions';
+$string['showactivitydates'] = 'Show activity dates';
+$string['showactivitydates_help'] = 'Activity dates are always shown on the activity page. This setting determines whether activity dates are also shown below each activity on the course page.';
 $string['showadvancededitor'] = 'Advanced';
 $string['showadvancedsettings'] = 'Show advanced settings';
 $string['showall'] = 'Show all {$a}';
@@ -1963,7 +1966,6 @@ $string['skipped'] = 'Skipped';
 $string['skiptocategorylisting'] = 'Skip to the category listings';
 $string['skiptocourselisting'] = 'Skip to the course listings';
 $string['skiptocoursedetails'] = 'Skip to the detailed course information';
-$string['skypeid'] = 'Skype ID';
 $string['socialheadline'] = 'Social forum - latest topics';
 $string['someallowguest'] = 'Some courses may allow guest access';
 $string['someerrorswerefound'] = 'Some information was missing or incorrect. Look below for details.';
@@ -2223,6 +2225,7 @@ $string['useruploadtype'] = 'User upload type: {$a}';
 $string['userzones'] = 'User zones';
 $string['usetheme'] = 'Use theme';
 $string['usingexistingcourse'] = 'Using existing course';
+$string['validatehtml'] = 'Validate HTML';
 $string['valuealreadyused'] = 'This value has already been used.';
 $string['version'] = 'Version';
 $string['view'] = 'View';
@@ -2238,6 +2241,7 @@ $string['viewsolution'] = 'view solution';
 $string['visible'] = 'Visible';
 $string['visible_help'] = 'This setting determines whether the course appears in the list of courses. Apart from teachers and administrators, users are not allowed to enter the course.';
 $string['visibletostudents'] = 'Visible to {$a}';
+$string['wcagcheck'] = 'Web Content Accessibility Guidelines (WCAG) check';
 $string['warning'] = 'Warning';
 $string['warningdeleteresource'] = 'Warning: {$a} is referred in a resource. Would you like to update the resource?';
 $string['webpage'] = 'Web page';
@@ -2289,7 +2293,6 @@ $string['writingmoduleinfo'] = 'Writing modules info';
 $string['writingscalesinfo'] = 'Writing scales info';
 $string['writinguserinfo'] = 'Writing users info';
 $string['wrongpassword'] = 'Incorrect password for this username';
-$string['yahooid'] = 'Yahoo ID';
 $string['year'] = 'year';
 $string['years'] = 'years';
 $string['yes'] = 'Yes';
@@ -2310,3 +2313,14 @@ $string['deprecatedeventname'] = '{$a} (no longer in use)';
 // Deprecated since Moodle 3.9.
 $string['participantscount'] = 'Number of participants: {$a}';
 $string['userfilterplaceholder'] = 'Search keyword or select filter';
+
+// Deprecated since Moodle 3.11.
+$string['hidepicture'] = 'Hide picture';
+$string['grade'] = 'Grade';
+$string['aimid'] = 'AIM ID';
+$string['yahooid'] = 'Yahoo ID';
+$string['skypeid'] = 'Skype ID';
+$string['icqnumber'] = 'ICQ number';
+$string['msnid'] = 'MSN ID';
+$string['coursepreferences'] = 'Course preferences';
+$string['registrationno'] = 'No, I do not wish to receive any emails';

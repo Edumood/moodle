@@ -1528,6 +1528,7 @@ function quiz_get_review_options($quiz, $attempt, $context) {
         $options->rightanswer = question_display_options::VISIBLE;
         $options->overallfeedback = question_display_options::VISIBLE;
         $options->history = question_display_options::VISIBLE;
+        $options->userinfoinhistory = $attempt->userid;
 
     }
 
@@ -1699,7 +1700,8 @@ function quiz_send_notification_messages($course, $quiz, $attempt, $context, $cm
     // Check for notifications required.
     $notifyfields = 'u.id, u.username, u.idnumber, u.email, u.emailstop, u.lang,
             u.timezone, u.mailformat, u.maildisplay, u.auth, u.suspended, u.deleted, ';
-    $notifyfields .= get_all_user_name_fields(true, 'u');
+    $userfieldsapi = \core_user\fields::for_name();
+    $notifyfields .= $userfieldsapi->get_sql('u', false, '', '', false)->selects;
     $groups = groups_get_all_groups($course->id, $submitter->id, $cm->groupingid);
     if (is_array($groups) && count($groups) > 0) {
         $groups = array_keys($groups);
@@ -1921,7 +1923,7 @@ function quiz_process_group_deleted_in_course($courseid) {
 
     // It would be nice if we got the groupid that was deleted.
     // Instead, we just update all quizzes with orphaned group overrides.
-    $sql = "SELECT o.id, o.quiz
+    $sql = "SELECT o.id, o.quiz, o.groupid
               FROM {quiz_overrides} o
               JOIN {quiz} quiz ON quiz.id = o.quiz
          LEFT JOIN {groups} grp ON grp.id = o.groupid
@@ -1929,12 +1931,16 @@ function quiz_process_group_deleted_in_course($courseid) {
                AND o.groupid IS NOT NULL
                AND grp.id IS NULL";
     $params = array('courseid' => $courseid);
-    $records = $DB->get_records_sql_menu($sql, $params);
+    $records = $DB->get_records_sql($sql, $params);
     if (!$records) {
         return; // Nothing to do.
     }
     $DB->delete_records_list('quiz_overrides', 'id', array_keys($records));
-    quiz_update_open_attempts(array('quizid' => array_unique(array_values($records))));
+    $cache = cache::make('mod_quiz', 'overrides');
+    foreach ($records as $record) {
+        $cache->delete("{$record->quiz}_g_{$record->groupid}");
+    }
+    quiz_update_open_attempts(['quizid' => array_unique(array_column($records, 'quiz'))]);
 }
 
 /**
@@ -2136,7 +2142,7 @@ function quiz_question_tostring($question, $showicon = false, $showquestiontext 
     if ($showidnumber && $question->idnumber !== null && $question->idnumber !== '') {
         $result .= ' ' . html_writer::span(
                 html_writer::span(get_string('idnumber', 'question'), 'accesshide') .
-                ' ' . $question->idnumber, 'badge badge-primary');
+                ' ' . s($question->idnumber), 'badge badge-primary');
     }
 
     // Question tags.

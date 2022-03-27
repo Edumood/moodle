@@ -16,7 +16,6 @@
 /**
  * Manage the timeline courses view for the timeline block.
  *
- * @package    block_timeline
  * @copyright  2018 Ryan Wyllie <ryan@moodle.com>
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -59,7 +58,7 @@ function(
         LOADING_ICON: 'core/loading'
     };
 
-    var COURSE_CLASSIFICATION = 'inprogress';
+    var COURSE_CLASSIFICATION = 'all';
     var COURSE_SORT = 'fullname asc';
     var COURSE_EVENT_LIMIT = 5;
     var COURSE_LIMIT = 2;

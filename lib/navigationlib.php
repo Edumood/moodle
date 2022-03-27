@@ -662,10 +662,13 @@ class navigation_node implements renderable {
      * @return string
      */
     public function get_content($shorttext=false) {
+        $navcontext = \context_helper::get_navigation_filter_context(null);
+        $options = !empty($navcontext) ? ['context' => $navcontext] : null;
+
         if ($shorttext && $this->shorttext!==null) {
-            return format_string($this->shorttext);
+            return format_string($this->shorttext, null, $options);
         } else {
-            return format_string($this->text);
+            return format_string($this->text, null, $options);
         }
     }
 
@@ -1962,13 +1965,14 @@ class global_navigation extends navigation_node {
      * @return void.
      */
     protected function add_category(stdClass $category, navigation_node $parent, $nodetype = self::TYPE_CATEGORY) {
+        global $CFG;
         if (array_key_exists($category->id, $this->addedcategories)) {
             return;
         }
         $canview = core_course_category::can_view_category($category);
         $url = $canview ? new moodle_url('/course/index.php', array('categoryid' => $category->id)) : null;
-        $context = context_coursecat::instance($category->id);
-        $categoryname = $canview ? format_string($category->name, true, array('context' => $context)) :
+        $context = \context_helper::get_navigation_filter_context(context_coursecat::instance($category->id));
+        $categoryname = $canview ? format_string($category->name, true, ['context' => $context]) :
             get_string('categoryhidden');
         $categorynode = $parent->add($categoryname, $url, $nodetype, $categoryname, $category->id);
         if (!$canview) {
@@ -2179,7 +2183,8 @@ class global_navigation extends navigation_node {
             }
 
             // Prepare the default name and url for the node
-            $activityname = format_string($activity->name, true, array('context' => context_module::instance($activity->id)));
+            $displaycontext = \context_helper::get_navigation_filter_context(context_module::instance($activity->id));
+            $activityname = format_string($activity->name, true, ['context' => $displaycontext]);
             $action = new moodle_url($activity->url);
 
             // Check if the onclick property is set (puke!)
@@ -2631,8 +2636,9 @@ class global_navigation extends navigation_node {
         }
 
         $issite = ($course->id == $SITE->id);
-        $shortname = format_string($course->shortname, true, array('context' => $coursecontext));
-        $fullname = format_string($course->fullname, true, array('context' => $coursecontext));
+        $displaycontext = \context_helper::get_navigation_filter_context($coursecontext);
+        $shortname = format_string($course->shortname, true, ['context' => $displaycontext]);
+        $fullname = format_string($course->fullname, true, ['context' => $displaycontext]);
         // This is the name that will be shown for the course.
         $coursename = empty($CFG->navshowfullcoursenames) ? $shortname : $fullname;
 
@@ -2687,7 +2693,7 @@ class global_navigation extends navigation_node {
         $coursenode->showinflatnavigation = $coursetype == self::COURSE_MY;
 
         $coursenode->hidden = (!$course->visible);
-        $coursenode->title(format_string($course->fullname, true, array('context' => $coursecontext, 'escape' => false)));
+        $coursenode->title(format_string($course->fullname, true, ['context' => $displaycontext, 'escape' => false]));
         if ($canexpandcourse) {
             // This course can be expanded by the user, make it a branch to make the system aware that its expandable by ajax.
             $coursenode->nodetype = self::NODETYPE_BRANCH;
@@ -2911,6 +2917,7 @@ class global_navigation extends navigation_node {
                     self::TYPE_SETTING, null, 'privatefiles', new pix_icon('i/privatefiles', ''));
                 $node->display = false;
                 $node->showinflatnavigation = true;
+                $node->mainnavonly = true;
             }
         }
 
@@ -3659,8 +3666,10 @@ class navbar extends navigation_node {
                 if (!core_course_category::can_view_category($category)) {
                     continue;
                 }
-                $url = new moodle_url('/course/index.php', array('categoryid' => $category->id));
-                $name = format_string($category->name, true, array('context' => $context));
+
+                $displaycontext = \context_helper::get_navigation_filter_context($context);
+                $url = new moodle_url('/course/index.php', ['categoryid' => $category->id]);
+                $name = format_string($category->name, true, ['context' => $displaycontext]);
                 $categorynode = breadcrumb_navigation_node::create($name, $url, self::TYPE_CATEGORY, null, $category->id);
                 if (!$category->visible) {
                     $categorynode->hidden = true;
@@ -3670,7 +3679,8 @@ class navbar extends navigation_node {
         }
 
         // Don't show the 'course' node if enrolled in this course.
-        if (!is_enrolled(context_course::instance($this->page->course->id, null, '', true))) {
+        $coursecontext = context_course::instance($this->page->course->id);
+        if (!is_enrolled($coursecontext, null, '', true)) {
             $courses = $this->page->navigation->get('courses');
             if (!$courses) {
                 // Courses node may not be present.
@@ -4010,10 +4020,11 @@ class flat_navigation extends navigation_node_collection {
             $url = new moodle_url('/course/view.php', array('id' => $course->id));
 
             $coursecontext = context_course::instance($course->id, MUST_EXIST);
+            $displaycontext = \context_helper::get_navigation_filter_context($coursecontext);
             // This is the name that will be shown for the course.
             $coursename = empty($CFG->navshowfullcoursenames) ?
-                format_string($course->shortname, true, array('context' => $coursecontext)) :
-                format_string($course->fullname, true, array('context' => $coursecontext));
+                format_string($course->shortname, true, ['context' => $displaycontext]) :
+                format_string($course->fullname, true, ['context' => $displaycontext]);
 
             $flat = new flat_navigation_node(navigation_node::create($coursename, $url), 0);
             $flat->set_collectionlabel($coursename);
@@ -4077,7 +4088,7 @@ class flat_navigation extends navigation_node_collection {
             $addblockurl = "?{$url->get_query_string(false)}";
 
             $PAGE->requires->js_call_amd('core/addblockmodal', 'init',
-                [$PAGE->pagetype, $PAGE->pagelayout, $addblockurl]);
+                [$PAGE->pagetype, $PAGE->pagelayout, $addblockurl, $PAGE->subpage]);
         }
     }
 
@@ -4490,8 +4501,9 @@ class settings_navigation extends navigation_node {
 
         // View course reports.
         if ($adminoptions->reports) {
-            $reportnav = $coursenode->add(get_string('reports'), null, self::TYPE_CONTAINER, null, 'coursereports',
-                    new pix_icon('i/stats', ''));
+            $reportnav = $coursenode->add(get_string('reports'),
+                new moodle_url('/report/view.php', ['courseid' => $coursecontext->instanceid]),
+                self::TYPE_CONTAINER, null, 'coursereports', new pix_icon('i/stats', ''));
             $coursereports = core_component::get_plugin_list('coursereport');
             foreach ($coursereports as $report => $dir) {
                 $libfile = $CFG->dirroot.'/course/report/'.$report.'/lib.php';
@@ -5086,15 +5098,6 @@ class settings_navigation extends navigation_node {
             }
         }
 
-        // Add "Course preferences" link.
-        if (isloggedin() && !isguestuser($user)) {
-            if ($currentuser && has_capability('moodle/user:editownprofile', $systemcontext) ||
-                has_capability('moodle/user:editprofile', $usercontext)) {
-                $url = new moodle_url('/user/course.php', array('id' => $user->id, 'course' => $course->id));
-                $useraccount->add(get_string('coursepreferences'), $url, self::TYPE_SETTING, null, 'coursepreferences');
-            }
-        }
-
         // Add "Calendar preferences" link.
         if (isloggedin() && !isguestuser($user)) {
             if ($currentuser && has_capability('moodle/user:editownprofile', $systemcontext) ||
@@ -5104,12 +5107,22 @@ class settings_navigation extends navigation_node {
             }
         }
 
+        // Add "Content bank preferences" link.
+        if (isloggedin() && !isguestuser($user)) {
+            if ($currentuser && has_capability('moodle/user:editownprofile', $systemcontext) ||
+                has_capability('moodle/user:editprofile', $usercontext)) {
+                $url = new moodle_url('/user/contentbank.php', ['id' => $user->id]);
+                $useraccount->add(get_string('contentbankpreferences', 'core_contentbank'), $url, self::TYPE_SETTING,
+                        null, 'contentbankpreferences');
+            }
+        }
+
         // View the roles settings.
-        if (has_any_capability(array('moodle/role:assign', 'moodle/role:safeoverride', 'moodle/role:override',
-                'moodle/role:manage'), $usercontext)) {
+        if (has_any_capability(['moodle/role:assign', 'moodle/role:safeoverride', 'moodle/role:override',
+                'moodle/role:manage'], $usercontext)) {
             $roles = $usersetting->add(get_string('roles'), null, self::TYPE_SETTING);
 
-            $url = new moodle_url('/admin/roles/usersroles.php', array('userid'=>$user->id, 'courseid'=>$course->id));
+            $url = new moodle_url('/admin/roles/usersroles.php', ['userid' => $user->id, 'courseid' => $course->id]);
             $roles->add(get_string('thisusersroles', 'role'), $url, self::TYPE_SETTING);
 
             $assignableroles = get_assignable_roles($usercontext, ROLENAME_BOTH);
@@ -5171,7 +5184,7 @@ class settings_navigation extends navigation_node {
         }
         // Security keys.
         if ($currentuser && $enablemanagetokens) {
-            $url = new moodle_url('/user/managetoken.php', array('sesskey'=>sesskey()));
+            $url = new moodle_url('/user/managetoken.php');
             $useraccount->add(get_string('securitykeys', 'webservice'), $url, self::TYPE_SETTING);
         }
 

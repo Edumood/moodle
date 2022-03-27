@@ -16,7 +16,7 @@
 }}
 {{! Block Skip Link }}
 {{#showskiplink}}
-  <a href="#sb-{{skipid}}" class="sr-only sr-only-focusable">{{#str}}skipa, access, {{title}}{{/str}}</a>
+  <a href="#sb-{{skipid}}" class="sr-only sr-only-focusable">{{#str}}skipa, access, {{{title}}}{{/str}}</a>
 {{/showskiplink}}
 
 {{! Start Block Container }}
@@ -25,7 +25,7 @@
      role="{{ariarole}}"
      data-block="{{type}}"
      {{#arialabel}}
-        aria-label={{#quote}}{{{arialabel}}}{{/quote}}
+        aria-label="{{arialabel}}"
      {{/arialabel}}
      {{^arialabel}}
         {{#title}}

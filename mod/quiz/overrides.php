@@ -88,7 +88,7 @@ $headers = [];
 
 // Fetch all overrides.
 if ($groupmode) {
-    $colname = get_string('group');
+    $headers[] = get_string('group');
     // To filter the result by the list of groups that the current user has access to.
     if ($groups) {
         $params = ['quizid' => $quiz->id];
@@ -108,15 +108,17 @@ if ($groupmode) {
     // User overrides.
     $colclasses[] = 'colname';
     $headers[] = get_string('user');
-    $extrauserfields = get_extra_user_fields($context);
+    // TODO Does not support custom user profile fields (MDL-70456).
+    $userfieldsapi = \core_user\fields::for_identity($context, false)->with_name()->with_userpic();
+    $extrauserfields = $userfieldsapi->get_required_fields([\core_user\fields::PURPOSE_IDENTITY]);
     foreach ($extrauserfields as $field) {
         $colclasses[] = 'col' . $field;
-        $headers[] = get_user_field_name($field);
+        $headers[] = \core_user\fields::get_display_name($field);
     }
 
     list($sort, $params) = users_order_by_sql('u');
     $params['quizid'] = $quiz->id;
-    $userfields = user_picture::fields('u', $extrauserfields, 'userid');
+    $userfields = $userfieldsapi->get_sql('u', true, '', 'userid', false)->selects;
 
     if ($showallgroups) {
         $groupsjoin = '';
@@ -147,17 +149,20 @@ if ($groupmode) {
 
 // Initialise table.
 $table = new html_table();
+$table->head = $headers;
 $table->colclasses = $colclasses;
+$table->headspan = array_fill(0, count($headers), 1);
+
+$table->head[] = get_string('overrides', 'quiz');
 $table->colclasses[] = 'colsetting';
 $table->colclasses[] = 'colvalue';
-$table->colclasses[] = 'colaction';
-$table->headspan = array_fill(0, count($headers), 1);
 $table->headspan[] = 2;
-$table->headspan[] = 1;
-$table->head = $headers;
-$table->head[] = get_string('overrides', 'quiz');
-$table->head[] = get_string('action');
 
+if ($canedit) {
+    $table->head[] = get_string('action');
+    $table->colclasses[] = 'colaction';
+    $table->headspan[] = 1;
+}
 $userurl = new moodle_url('/user/view.php', []);
 $groupurl = new moodle_url('/group/overview.php', ['id' => $cm->course]);
 
@@ -230,14 +235,14 @@ foreach ($overrides as $override) {
     } else {
         $usercell = new html_table_cell();
         $usercell->rowspan = count($fields);
-        $usercell->text = html_writer::link(new moodle_url($groupurl, ['id' => $override->userid]),
+        $usercell->text = html_writer::link(new moodle_url($userurl, ['id' => $override->userid]),
                 fullname($override) . $extranamebit);
         $usercells[] = $usercell;
 
         foreach ($extrauserfields as $field) {
             $usercell = new html_table_cell();
             $usercell->rowspan = count($fields);
-            $usercell->text = $override->$field;
+            $usercell->text = s($override->$field);
             $usercells[] = $usercell;
         }
     }

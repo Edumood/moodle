@@ -61,7 +61,7 @@ function resource_redirect_if_migrated($oldid, $cmid) {
  * @return does not return
  */
 function resource_display_embed($resource, $cm, $course, $file) {
-    global $CFG, $PAGE, $OUTPUT;
+    global $PAGE, $OUTPUT, $USER;
 
     $clicktoopen = resource_get_clicktoopen($file, $resource->revision);
 
@@ -102,7 +102,13 @@ function resource_display_embed($resource, $cm, $course, $file) {
     resource_print_header($resource, $cm, $course);
     resource_print_heading($resource, $cm, $course);
 
-    echo $code;
+    // Display any activity information (eg completion requirements / dates).
+    $cminfo = cm_info::create($cm);
+    $completiondetails = \core_completion\cm_completion_details::get_instance($cminfo, $USER->id);
+    $activitydates = \core\activity_dates::get_dates_for_module($cminfo, $USER->id);
+    echo $OUTPUT->activity_information($cminfo, $completiondetails, $activitydates);
+
+    echo format_text($code, FORMAT_HTML, ['noclean' => true]);
 
     resource_print_intro($resource, $cm, $course);
 
@@ -202,10 +208,16 @@ function resource_get_clicktodownload($file, $revision) {
  * @return does not return
  */
 function resource_print_workaround($resource, $cm, $course, $file) {
-    global $CFG, $OUTPUT;
-
+    global $CFG, $OUTPUT, $USER;
     resource_print_header($resource, $cm, $course);
     resource_print_heading($resource, $cm, $course, true);
+
+    // Display any activity information (eg completion requirements / dates).
+    $cminfo = cm_info::create($cm);
+    $completiondetails = \core_completion\cm_completion_details::get_instance($cminfo, $USER->id);
+    $activitydates = \core\activity_dates::get_dates_for_module($cminfo, $USER->id);
+    echo $OUTPUT->activity_information($cminfo, $completiondetails, $activitydates);
+
     resource_print_intro($resource, $cm, $course, true);
 
     $resource->mainfile = $file->get_filename();
@@ -214,7 +226,7 @@ function resource_print_workaround($resource, $cm, $course, $file) {
         case RESOURCELIB_DISPLAY_POPUP:
             $path = '/'.$file->get_contextid().'/mod_resource/content/'.$resource->revision.$file->get_filepath().$file->get_filename();
             $fullurl = file_encode_url($CFG->wwwroot.'/pluginfile.php', $path, false);
-            $options = empty($resource->displayoptions) ? array() : unserialize($resource->displayoptions);
+            $options = empty($resource->displayoptions) ? [] : (array) unserialize_array($resource->displayoptions);
             $width  = empty($options['popupwidth'])  ? 620 : $options['popupwidth'];
             $height = empty($options['popupheight']) ? 450 : $options['popupheight'];
             $wh = "width=$width,height=$height,toolbar=no,location=no,menubar=no,copyhistory=no,status=no,directories=no,scrollbars=yes,resizable=yes";
@@ -280,7 +292,7 @@ function resource_print_heading($resource, $cm, $course, $notused = false) {
  * @return string Size and type or empty string if show options are not enabled
  */
 function resource_get_file_details($resource, $cm) {
-    $options = empty($resource->displayoptions) ? array() : @unserialize($resource->displayoptions);
+    $options = empty($resource->displayoptions) ? [] : (array) unserialize_array($resource->displayoptions);
     $filedetails = array();
     if (!empty($options['showsize']) || !empty($options['showtype']) || !empty($options['showdate'])) {
         $context = context_module::instance($cm->id);
@@ -349,7 +361,7 @@ function resource_get_optional_details($resource, $cm) {
 
     $details = '';
 
-    $options = empty($resource->displayoptions) ? array() : @unserialize($resource->displayoptions);
+    $options = empty($resource->displayoptions) ? [] : (array) unserialize_array($resource->displayoptions);
     if (!empty($options['showsize']) || !empty($options['showtype']) || !empty($options['showdate'])) {
         if (!array_key_exists('filedetails', $options)) {
             $filedetails = resource_get_file_details($resource, $cm);
@@ -410,7 +422,7 @@ function resource_get_optional_details($resource, $cm) {
 function resource_print_intro($resource, $cm, $course, $ignoresettings=false) {
     global $OUTPUT;
 
-    $options = empty($resource->displayoptions) ? array() : unserialize($resource->displayoptions);
+    $options = empty($resource->displayoptions) ? [] : (array) unserialize_array($resource->displayoptions);
 
     $extraintro = resource_get_optional_details($resource, $cm);
     if ($extraintro) {

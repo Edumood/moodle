@@ -71,6 +71,7 @@ $string['comments'] = 'Comments';
 $string['commentsaved'] = 'Comment saved';
 $string['commentsn'] = '{$a} comment(s)';
 $string['commentsoff'] = 'Comments feature is not enabled';
+$string['completiondetail:entries'] = 'Make entries: {$a}';
 $string['completionentries'] = 'Require entries';
 $string['completionentriescount'] = 'Count of entries';
 $string['completionentriesdesc'] = 'Minimum number of entries required: {$a}';
@@ -160,7 +161,7 @@ $string['failedpresetdelete'] = 'Error deleting a preset!';
 $string['fieldadded'] = 'Field added';
 $string['fieldallowautolink'] = 'Allow autolink';
 $string['fielddeleted'] = 'Field deleted';
-$string['fielddelimiter'] = 'Field delimiter';
+$string['fielddelimiter'] = 'Field separator';
 $string['fielddescription'] = 'Field description';
 $string['fieldenclosure'] = 'Field enclosure';
 $string['fieldheight'] = 'Height';
@@ -357,6 +358,7 @@ $string['rows'] = 'rows';
 $string['rssglobaldisabled'] = 'Disabled. See site configuration variables.';
 $string['rsstemplate'] = 'RSS template';
 $string['rsstitletemplate'] = 'RSS title template';
+$string['rsstype'] = 'RSS feed for this activity';
 $string['save'] = 'Save';
 $string['saveandadd'] = 'Save and add another';
 $string['saveandview'] = 'Save and view';
@@ -399,7 +401,7 @@ $string['uploadrecords'] = 'Upload entries from a file';
 $string['uploadrecords_help'] = 'Entries may be uploaded via text file. The format of the file should be as follows:
 
 * Each line of the file contains one record
-* Each record is a series of data separated by commas (or other delimiters)
+* Each record is a series of data separated by the selected separator
 * The first record contains a list of fieldnames defining the format of the rest of the file
 
 The field enclosure is a character that surrounds each field in each record. It can normally be left unset.';

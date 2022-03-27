@@ -27,12 +27,12 @@
 
 require_once(__DIR__ . '/../../behat/behat_base.php');
 
-use Behat\Gherkin\Node\TableNode as TableNode;
-use Behat\Mink\Exception\DriverException as DriverException;
-use Behat\Mink\Exception\ElementNotFoundException as ElementNotFoundException;
-use Behat\Mink\Exception\ExpectationException as ExpectationException;
-use WebDriver\Exception\NoSuchElement as NoSuchElement;
-use WebDriver\Exception\StaleElementReference as StaleElementReference;
+use Behat\Gherkin\Node\TableNode;
+use Behat\Mink\Exception\DriverException;
+use Behat\Mink\Exception\ElementNotFoundException;
+use Behat\Mink\Exception\ExpectationException;
+use Facebook\WebDriver\Exception\NoSuchElementException;
+use Facebook\WebDriver\Exception\StaleElementReferenceException;
 
 /**
  * Cross component steps definitions.
@@ -121,9 +121,9 @@ class behat_general extends behat_base {
         // Wrapped in try & catch in case the redirection has already been executed.
         try {
             $content = $metarefresh->getAttribute('content');
-        } catch (NoSuchElement $e) {
+        } catch (NoSuchElementException $e) {
             return true;
-        } catch (StaleElementReference $e) {
+        } catch (StaleElementReferenceException $e) {
             return true;
         }
 
@@ -661,7 +661,7 @@ class behat_general extends behat_base {
                             throw new ExpectationException('"' . $args['text'] . '" text was found in the page',
                                 $context->getSession());
                         }
-                    } catch (WebDriver\Exception\NoSuchElement $e) {
+                    } catch (NoSuchElementException $e) {
                         // Do nothing just return, as element is no more on page.
                         return true;
                     } catch (ElementNotFoundException $e) {
@@ -1000,7 +1000,7 @@ EOF;
             // Using the spin method as we want a reduced timeout but there is no need for a 0.1 seconds interval
             // because in the optimistic case we will timeout.
             // If all goes good it will throw an ElementNotFoundExceptionn that we will catch.
-            return $this->find($selectortype, $element, $exception, false, behat_base::get_reduced_timeout());
+            $this->find($selectortype, $element, $exception, false, behat_base::get_reduced_timeout());
         } catch (ElementNotFoundException $e) {
             // We expect the element to not be found.
             return;
@@ -1575,7 +1575,7 @@ EOF;
 
         if ($content !== $expectedcontent) {
             throw new ExpectationException('Image is not identical to the fixture. Received ' .
-            strlen($content) . ' bytes and expected ' . strlen($expectedcontent) . ' bytes');
+            strlen($content) . ' bytes and expected ' . strlen($expectedcontent) . ' bytes', $this->getSession());
         }
     }
 
@@ -1717,7 +1717,7 @@ EOF;
     }
 
     /**
-     * Press a named key with an optional set of modifiers.
+     * Press a named or character key with an optional set of modifiers.
      *
      * Supported named keys are:
      * - up
@@ -1734,6 +1734,8 @@ EOF;
      * - escape
      * - enter
      * - tab
+     *
+     * You can also use a single character for the key name e.g. 'Ctrl C'.
      *
      * Supported moderators are:
      * - shift
@@ -1830,7 +1832,12 @@ EOF;
                 $keys[] = behat_keys::SPACE;
                 break;
             default:
-                throw new \coding_exception("Unknown key '$key'}");
+                // You can enter a single ASCII character (e.g. a letter) to directly type that key.
+                if (strlen($key) === 1) {
+                    $keys[] = strtolower($key);
+                } else {
+                    throw new \coding_exception("Unknown key '$key'}");
+                }
         }
 
         behat_base::type_keys($this->getSession(), $keys);
@@ -1860,7 +1867,8 @@ EOF;
             list($modifier, $char) = preg_split('/-/', $key, 2);
             $modifier = strtolower($modifier);
             if (!in_array($modifier, $validmodifiers)) {
-                throw new ExpectationException(sprintf('Unknown key modifier: %s.', $modifier));
+                throw new ExpectationException(sprintf('Unknown key modifier: %s.', $modifier),
+                    $this->getSession());
             }
         }
         if (is_numeric($char)) {

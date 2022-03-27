@@ -1738,34 +1738,37 @@ class core_accesslib_testcase extends advanced_testcase {
         $this->setAdminUser();
 
         $roles = get_user_roles_in_course($user1->id, $course->id);
-        $this->assertEquals(1, preg_match_all('/,/', $roles, $matches));
-        $this->assertTrue(strpos($roles, role_get_name($teacherrole, $coursecontext)) !== false);
+        $this->assertEquals([
+            role_get_name($teacherrole, $coursecontext),
+            role_get_name($studentrole, $coursecontext),
+        ], array_map('strip_tags', explode(', ', $roles)));
 
         $roles = get_user_roles_in_course($user2->id, $course->id);
-        $this->assertEquals(0, preg_match_all('/,/', $roles, $matches));
-        $this->assertTrue(strpos($roles, role_get_name($studentrole, $coursecontext)) !== false);
+        $this->assertEquals([
+            role_get_name($studentrole, $coursecontext),
+        ], array_map('strip_tags', explode(', ', $roles)));
 
         $roles = get_user_roles_in_course($user3->id, $course->id);
-        $this->assertSame('', $roles);
+        $this->assertEmpty($roles);
 
         // Managers should be able to see a link to their own role type, given they can assign it in the context.
         $this->setUser($user4);
         $roles = get_user_roles_in_course($user4->id, $course->id);
-        $this->assertNotEmpty($roles);
-        $this->assertEquals(1, count(explode(',', $roles)));
-        $this->assertTrue(strpos($roles, role_get_name($managerrole, $coursecontext)) !== false);
+        $this->assertEquals([
+            role_get_name($managerrole, $coursecontext),
+        ], array_map('strip_tags', explode(', ', $roles)));
 
         // Managers should see 2 roles if viewing a user who has been enrolled as a student and a teacher in the course.
         $roles = get_user_roles_in_course($user1->id, $course->id);
-        $this->assertEquals(2, count(explode(',', $roles)));
-        $this->assertTrue(strpos($roles, role_get_name($studentrole, $coursecontext)) !== false);
-        $this->assertTrue(strpos($roles, role_get_name($teacherrole, $coursecontext)) !== false);
+        $this->assertEquals([
+            role_get_name($teacherrole, $coursecontext),
+            role_get_name($studentrole, $coursecontext),
+        ], array_map('strip_tags', explode(', ', $roles)));
 
         // Students should not see the manager role if viewing a manager's profile.
         $this->setUser($user2);
         $roles = get_user_roles_in_course($user4->id, $course->id);
         $this->assertEmpty($roles); // Should see 0 roles on the manager's profile.
-        $this->assertFalse(strpos($roles, role_get_name($managerrole, $coursecontext)) !== false);
     }
 
     /**
@@ -4230,7 +4233,7 @@ class core_accesslib_testcase extends advanced_testcase {
     public function test_is_parent_of(string $contextpath, string $testpath, bool $testself, bool $expected): void {
         $context = $this->getMockBuilder(\context::class)
             ->disableOriginalConstructor()
-            ->setMethods([
+            ->onlyMethods([
                 'get_url',
                 'get_capabilities',
             ])
@@ -4242,7 +4245,7 @@ class core_accesslib_testcase extends advanced_testcase {
 
         $comparisoncontext = $this->getMockBuilder(\context::class)
             ->disableOriginalConstructor()
-            ->setMethods([
+            ->onlyMethods([
                 'get_url',
                 'get_capabilities',
             ])
@@ -4332,7 +4335,7 @@ class core_accesslib_testcase extends advanced_testcase {
     public function test_is_child_of(string $contextpath, string $testpath, bool $testself, bool $expected): void {
         $context = $this->getMockBuilder(\context::class)
             ->disableOriginalConstructor()
-            ->setMethods([
+            ->onlyMethods([
                 'get_url',
                 'get_capabilities',
             ])
@@ -4344,7 +4347,7 @@ class core_accesslib_testcase extends advanced_testcase {
 
         $comparisoncontext = $this->getMockBuilder(\context::class)
             ->disableOriginalConstructor()
-            ->setMethods([
+            ->onlyMethods([
                 'get_url',
                 'get_capabilities',
             ])
@@ -4591,6 +4594,29 @@ class core_accesslib_testcase extends advanced_testcase {
         $this->setUser(0);
         $this->expectException(\required_capability_exception::class);
         require_all_capabilities($sca, $coursecontext);
+    }
+
+    /**
+     * Test get_navigation_filter_context.
+     *
+     * @covers ::get_navigation_filter_context
+     */
+    public function test_get_navigation_filter_context() {
+        $this->resetAfterTest();
+        $course = $this->getDataGenerator()->create_course();
+        set_config('filternavigationwithsystemcontext', 0);
+        // First test passed values are returned if disabled.
+        $this->assertNull(context_helper::get_navigation_filter_context(null));
+        $coursecontext = context_course::instance($course->id);
+        $filtercontext = context_helper::get_navigation_filter_context($coursecontext);
+        $this->assertEquals($coursecontext->id, $filtercontext->id);
+
+        // Now test that any input returns system context if enabled.
+        set_config('filternavigationwithsystemcontext', 1);
+        $filtercontext = context_helper::get_navigation_filter_context(null);
+        $this->assertInstanceOf('\context_system', $filtercontext);
+        $filtercontext = context_helper::get_navigation_filter_context($coursecontext);
+        $this->assertInstanceOf('\context_system', $filtercontext);
     }
 }
 

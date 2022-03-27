@@ -52,6 +52,15 @@
     }
 }
 
+.path-grade-report-grader {
+    span.gradepass {
+        color: $success;
+    }
+    span.gradefail {
+        color: $danger;
+    }
+}
+
 // Rubrics
 #page-grade-grading-manage {
     #activemethodselector {
@@ -435,6 +444,14 @@
         .leveleven {
             background-color: $table-bg;
         }
+    }
+
+    .column-contributiontocoursetotal,
+    .column-range,
+    .column-percentage,
+    .column-weight {
+        /*rtl:ignore*/
+        direction: ltr;
     }
 }
 

@@ -3,9 +3,9 @@
   <library>
     <location>adodb</location>
     <name>AdoDB</name>
-    <license>BSD/GPL</license>
-    <version>5.20.16</version>
-    <licenseversion>2.1+</licenseversion>
+    <license>BSD/LGPL</license>
+    <version>5.21.0</version>
+    <licenseversion>3-Clause/2.1+</licenseversion>
   </library>
   <library>
     <location>behat/axe</location>
@@ -32,7 +32,7 @@
     <location>phpspreadsheet</location>
     <name>PhpSpreadsheet</name>
     <license>MIT</license>
-    <version>1.10.1</version>
+    <version>1.16.0</version>
     <licenseversion></licenseversion>
   </library>
   <library>
@@ -102,7 +102,7 @@
     <location>phpmailer</location>
     <name>PHPMailer</name>
     <license>LGPL</license>
-    <version>6.2.0</version>
+    <version>6.5.3</version>
     <licenseversion>2.1</licenseversion>
   </library>
   <library>
@@ -116,7 +116,7 @@
     <location>tcpdf</location>
     <name>TCPDF</name>
     <license>LGPL</license>
-    <version>6.3.5</version>
+    <version>6.4.1</version>
     <licenseversion>3.0-only</licenseversion>
   </library>
   <library>
@@ -144,7 +144,7 @@
     <location>jquery</location>
     <name>jQuery</name>
     <license>MIT</license>
-    <version>3.4.1</version>
+    <version>3.5.1</version>
     <licenseversion></licenseversion>
   </library>
   <library>
@@ -223,7 +223,7 @@
     <location>rtlcss</location>
     <name>RTLCSS for PHP</name>
     <license>MIT</license>
-    <version>1.0.0</version>
+    <version>1.0.1</version>
   </library>
   <library>
     <location>scssphp</location>
@@ -235,7 +235,7 @@
     <location>spout</location>
     <name>Spout</name>
     <license>Apache</license>
-    <version>3.1.0</version>
+    <version>3.3.0</version>
     <licenseversion>2.0</licenseversion>
   </library>
   <library>
@@ -280,7 +280,7 @@
     <location>amd/src/adapter.js</location>
     <name>WebRTC adapter</name>
     <license>BSD</license>
-    <version>7.3.0</version>
+    <version>7.4.0</version>
     <licenseversion>3-Clause</licenseversion>
   </library>
   <library>
@@ -319,25 +319,25 @@
     <location>polyfills</location>
     <name>mdn-polyfill</name>
     <license>MIT</license>
-    <version>5.19.0</version>
+    <version>5.20.0</version>
   </library>
   <library>
     <location>emoji-data</location>
     <name>Emoji data</name>
     <license>MIT</license>
-    <version>4.1.0</version>
+    <version>6.0.0</version>
   </library>
   <library>
     <location>polyfills</location>
     <name>url-polyfill</name>
     <license>MIT</license>
-    <version>1.1.8</version>
+    <version>1.1.12</version>
   </library>
   <library>
     <location>plist</location>
     <name>plist</name>
     <license>MIT</license>
-    <version>2.0.1</version>
+    <version>2.0.2</version>
   </library>
   <library>
     <location>zipstream</location>

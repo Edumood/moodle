@@ -55,6 +55,7 @@ use moodle\mod\lti as lti;
 use Firebase\JWT\JWT;
 use Firebase\JWT\JWK;
 use mod_lti\local\ltiopenid\jwks_helper;
+use mod_lti\local\ltiopenid\registration_helper;
 
 global $CFG;
 require_once($CFG->dirroot.'/mod/lti/OAuth.php');
@@ -434,7 +435,7 @@ function lti_get_jwt_claim_mapping() {
             'claim' => 'url',
             'isarray' => false
         ],
-        'custom_context_memberships_url' => [
+        'custom_context_memberships_v2_url' => [
             'suffix' => 'nrps',
             'group' => 'namesroleservice',
             'claim' => 'context_memberships_url',
@@ -592,11 +593,11 @@ function lti_get_launch_data($instance, $nonce = '') {
             $endpoint = trim($instance->securetoolurl);
         }
 
-        $endpoint = lti_ensure_url_is_https($endpoint);
-    } else {
-        if (!strstr($endpoint, '://')) {
-            $endpoint = 'http://' . $endpoint;
+        if ($endpoint !== '') {
+            $endpoint = lti_ensure_url_is_https($endpoint);
         }
+    } else if ($endpoint !== '' && !strstr($endpoint, '://')) {
+        $endpoint = 'http://' . $endpoint;
     }
 
     $orgid = lti_get_organizationid($typeconfig);
@@ -2164,7 +2165,7 @@ function lti_get_ims_role($user, $cmid, $courseid, $islti2) {
         }
     }
 
-    if (is_siteadmin($user) || has_capability('mod/lti:admin', $context)) {
+    if (!is_role_switched($courseid) && (is_siteadmin($user)) || has_capability('mod/lti:admin', $context)) {
         // Make sure admins do not have the Learner role, then set admin role.
         $roles = array_diff($roles, array('Learner'));
         if (!$islti2) {
@@ -2374,11 +2375,7 @@ function lti_get_configured_types($courseid, $sectionreturn = 0) {
             $type->help     = clean_param($trimmeddescription, PARAM_NOTAGS);
             $type->helplink = get_string('modulename_shortcut_link', 'lti');
         }
-        if (empty($ltitype->icon)) {
-            $type->icon = $OUTPUT->pix_icon('icon', '', 'lti', array('class' => 'icon'));
-        } else {
-            $type->icon = html_writer::empty_tag('img', array('src' => $ltitype->icon, 'alt' => '', 'class' => 'icon'));
-        }
+        $type->icon = html_writer::empty_tag('img', ['src' => get_tool_type_icon_url($ltitype), 'alt' => '', 'class' => 'icon']);
         $type->link = new moodle_url('/course/modedit.php', array('add' => 'lti', 'return' => 0, 'course' => $courseid,
             'sr' => $sectionreturn, 'typeid' => $ltitype->id));
         $types[] = $type;
@@ -2756,7 +2753,7 @@ function lti_prepare_type_for_save($type, $config) {
         $type->clientid = $config->lti_clientid;
     }
     if ((!empty($type->ltiversion) && $type->ltiversion === LTI_VERSION_1P3) && empty($type->clientid)) {
-        $type->clientid = random_string(15);
+        $type->clientid = registration_helper::get()->new_clientid();
     } else if (empty($type->clientid)) {
         $type->clientid = null;
     }
@@ -2825,6 +2822,14 @@ function lti_update_type($type, $config) {
                 $record->value = $value;
                 lti_update_config($record);
             }
+        }
+        if (isset($type->toolproxyid) && $type->ltiversion === LTI_VERSION_1P3) {
+            // We need to remove the tool proxy for this tool to function under 1.3.
+            $toolproxyid = $type->toolproxyid;
+            $DB->delete_records('lti_tool_settings', array('toolproxyid' => $toolproxyid));
+            $DB->delete_records('lti_tool_proxies', array('id' => $toolproxyid));
+            $type->toolproxyid = null;
+            $DB->update_record('lti_types', $type);
         }
         require_once($CFG->libdir.'/modinfolib.php');
         if ($clearcache) {
@@ -3450,7 +3455,8 @@ function lti_post_launch_html($newparms, $endpoint, $debug=false) {
     }
     $r .= "</form>\n";
 
-    if ( ! $debug ) {
+    // Auto-submit the form if endpoint is set.
+    if ($endpoint !== '' && !$debug) {
         $r .= " <script type=\"text/javascript\"> \n" .
             "  //<![CDATA[ \n" .
             "    document.ltiLaunchForm.submit(); \n" .
@@ -4386,13 +4392,20 @@ function lti_load_cartridge($url, $map, $propertiesmap = array()) {
     $curl = new curl();
     $response = $curl->get($url);
 
+    // Got a completely empty response (real or error), cannot process this with
+    // DOMDocument::loadXML() because it errors with ValueError. So let's throw
+    // the moodle_exception before waiting to examine the errors later.
+    if (trim($response) === '') {
+        throw new moodle_exception('errorreadingfile', '', '', $url);
+    }
+
     // TODO MDL-46023 Replace this code with a call to the new library.
     $origerrors = libxml_use_internal_errors(true);
-    $origentity = libxml_disable_entity_loader(true);
+    $origentity = lti_libxml_disable_entity_loader(true);
     libxml_clear_errors();
 
     $document = new DOMDocument();
-    @$document->loadXML($response, LIBXML_DTDLOAD | LIBXML_DTDATTR);
+    @$document->loadXML($response, LIBXML_NONET);
 
     $cartridge = new DomXpath($document);
 
@@ -4400,7 +4413,7 @@ function lti_load_cartridge($url, $map, $propertiesmap = array()) {
 
     libxml_clear_errors();
     libxml_use_internal_errors($origerrors);
-    libxml_disable_entity_loader($origentity);
+    lti_libxml_disable_entity_loader($origentity);
 
     if (count($errors) > 0) {
         $message = 'Failed to load cartridge.';
@@ -4485,3 +4498,20 @@ function lti_new_access_token($typeid, $scopes) {
 
 }
 
+
+/**
+ * Wrapper for function libxml_disable_entity_loader() deprecated in PHP 8
+ *
+ * Method was deprecated in PHP 8 and it shows deprecation message. However it is still
+ * required in the previous versions on PHP. While Moodle supports both PHP 7 and 8 we need to keep it.
+ * @see https://php.watch/versions/8.0/libxml_disable_entity_loader-deprecation
+ *
+ * @param bool $value
+ * @return bool
+ */
+function lti_libxml_disable_entity_loader(bool $value): bool {
+    if (PHP_VERSION_ID < 80000) {
+        return (bool)libxml_disable_entity_loader($value);
+    }
+    return true;
+}

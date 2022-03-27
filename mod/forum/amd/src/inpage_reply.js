@@ -17,7 +17,6 @@
  * This module handles the in page replying to forum posts.
  *
  * @module     mod_forum/inpage_reply
- * @package    mod_forum
  * @copyright  2019 Peter Dias
  * @license    http://www.gnu.org/copyleft/gpl.html GNU GPL v3 or later
  */
@@ -179,7 +178,8 @@ define([
                     })
                     .then(function() {
                         location.href = "#p" + newid;
-                        return;
+                        // Reload the page, say if threshold is being set by user those would get reflected through the templates.
+                        location.reload();
                     })
                     .catch(function(error) {
                         hideSubmitButtonLoadingIcon(submitButton);

@@ -1012,10 +1012,17 @@ abstract class repository implements cacheable_object {
         global $DB, $CFG, $USER;
 
         // Fill $args attributes with default values unless specified
-        if (!isset($args['currentcontext']) || !($args['currentcontext'] instanceof context)) {
-            $current_context = context_system::instance();
+        if (isset($args['currentcontext'])) {
+            if ($args['currentcontext'] instanceof context) {
+                $current_context = $args['currentcontext'];
+            } else {
+                debugging('currentcontext passed to repository::get_instances was ' .
+                        'not a context object. Using system context instead, but ' .
+                        'you should probably fix your code.', DEBUG_DEVELOPER);
+                $current_context = context_system::instance();
+            }
         } else {
-            $current_context = $args['currentcontext'];
+            $current_context = context_system::instance();
         }
         $args['currentcontext'] = $current_context->id;
         $contextids = array();
@@ -2139,12 +2146,9 @@ abstract class repository implements cacheable_object {
      * @param array $value
      * @return bool
      */
-    public function filter(&$value) {
+    public function filter($value) {
         $accepted_types = optional_param_array('accepted_types', '', PARAM_RAW);
         if (isset($value['children'])) {
-            if (!empty($value['children'])) {
-                $value['children'] = array_filter($value['children'], array($this, 'filter'));
-            }
             return true; // always return directories
         } else {
             if ($accepted_types == '*' or empty($accepted_types)
