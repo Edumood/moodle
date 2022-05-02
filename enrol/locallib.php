@@ -1079,7 +1079,7 @@ class course_enrolment_manager {
             $contextid = $userrole->contextid;
             unset($userrole->contextid); // This would collide with user avatar.
             if (!array_key_exists($userrole->id, $users)) {
-                $users[$userrole->id] = $this->prepare_user_for_display($userrole, $extrafields, $now);
+                $users[$userrole->id] = $this->prepare_user_for_display($userrole, $extra fields, $now);
             }
             $a = new stdClass;
             $a->role = $roles[$userrole->roleid]->localname;
