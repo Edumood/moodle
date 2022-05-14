@@ -1587,12 +1587,15 @@ function format_text_email($text, $format) {
  * @return string
  */
 function format_module_intro($module, $activity, $cmid, $filter=true) {
-    global $CFG;
+    global $CFG,$OUTPUT,$PAGE;
     require_once("$CFG->libdir/filelib.php");
     $context = context_module::instance($cmid);
     $options = array('noclean' => true, 'para' => false, 'filter' => $filter, 'context' => $context, 'overflowdiv' => true);
     $intro = file_rewrite_pluginfile_urls($activity->intro, 'pluginfile.php', $context->id, 'mod_'.$module, 'intro', null);
-    return trim(format_text($intro, $activity->introformat, $options, null));
+    $prompt = new \mod_hearthrating\output\prompt($cmid);
+    $data = $prompt->export_for_template($OUTPUT);
+    $PAGE->requires->js_call_amd('mod_hearthrating/prompt', 'init');
+    return trim(format_text($intro, $activity->introformat, $options, null)).$OUTPUT->render_from_template('mod_hearthrating/prompt', $data);
 }
 
 /**

@@ -12,7 +12,7 @@ The information here is intended only for developers.
 === 3.2 ===
 
 * Condition plugins must replace the CSS selector "#fitem_id_availabilityconditionsjson" with ".availability-field".
-  This selector is often used in your plugin's yui/src/form/js/form.js file.
+  This selector is often used in your plugin's yui/src/form/js/prompt.js file.
 
 === 2.9 ===
 
